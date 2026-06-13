@@ -4,26 +4,78 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>StudiBudi — Temukan Teman Belajar</title>
+<link rel="icon" type="image/png" href="assets/studibudi-favicon.png"/>
+<script>
+  (() => {
+    const savedTheme = localStorage.getItem('studibudiTheme');
+    const preferredTheme = window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.dataset.theme = savedTheme || preferredTheme;
+  })();
+</script>
 <style>
   /* ── Design tokens ── */
   :root {
-    --bg:        #0f1117;
-    --surface:   #181c27;
-    --panel:     #1e2334;
-    --border:    #2a3050;
-    --accent:    #4f8ef7;
-    --accent2:   #7c5cfc;
-    --success:   #34d399;
-    --warn:      #fbbf24;
-    --danger:    #f87171;
-    --text:      #e4e8f5;
-    --muted:     #7a84a3;
-    --bubble-me: #1e3a6e;
+    color-scheme: dark;
+    --bg:          #0f1117;
+    --surface:     #181c27;
+    --panel:       #1e2334;
+    --border:      #2a3050;
+    --accent:      #4f8ef7;
+    --accent2:     #7c5cfc;
+    --accent-soft: #1e3a6e;
+    --accent-mid:  #254e99;
+    --accent-text: #89aff5;
+    --success:     #34d399;
+    --warn:        #fbbf24;
+    --danger:      #f87171;
+    --text:        #e4e8f5;
+    --muted:       #7a84a3;
+    --bubble-me:   #1e3a6e;
     --bubble-them: #232a40;
-    --font-ui:   'Inter', 'Segoe UI', system-ui, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-    --radius:    10px;
-    --transition: 0.18s ease;
+    --status-bg:   #1a2a1a;
+    --status-border:#34d39933;
+    --pm-bg:       #2a1a3a;
+    --pm-text:     #c4b0f0;
+    --glass:       #ffffff12;
+    --glass-border:#ffffff26;
+    --overlay:     #00000088;
+    --shadow:      #00000055;
+    --login-glow-1:#1a2a5e55;
+    --login-glow-2:#2d1b6955;
+    --font-ui:     'Inter', 'Segoe UI', system-ui, sans-serif;
+    --font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+    --radius:      10px;
+    --transition:  0.18s ease;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:          #f7f1e4;
+    --surface:     #fffaf0;
+    --panel:       #f3e5c4;
+    --border:      #d7bd82;
+    --accent:      #e1a815;
+    --accent2:     #8a5724;
+    --accent-soft: #f6dfa0;
+    --accent-mid:  #e6bd52;
+    --accent-text: #714514;
+    --success:     #3f8b5d;
+    --warn:        #b8790b;
+    --danger:      #b84335;
+    --text:        #3b2918;
+    --muted:       #806c55;
+    --bubble-me:   #f2c75c;
+    --bubble-them: #efe1c3;
+    --status-bg:   #eef5df;
+    --status-border:#6d9a4938;
+    --pm-bg:       #f3e4ce;
+    --pm-text:     #70451e;
+    --glass:       #7c53100d;
+    --glass-border:#8d681f33;
+    --overlay:     #4a341c66;
+    --shadow:      #5c3b1a26;
+    --login-glow-1:#f6c94b55;
+    --login-glow-2:#a9692e33;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -44,8 +96,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse at 60% 40%, #1a2a5e55 0%, transparent 60%),
-                radial-gradient(ellipse at 20% 80%, #2d1b6955 0%, transparent 55%),
+    background: radial-gradient(ellipse at 60% 40%, var(--login-glow-1) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 80%, var(--login-glow-2) 0%, transparent 55%),
                 var(--bg);
   }
 
@@ -55,7 +107,7 @@
     border-radius: 18px;
     padding: 40px 44px 36px;
     width: 380px;
-    box-shadow: 0 24px 64px #00000055;
+    box-shadow: 0 24px 64px var(--shadow);
   }
 
   .login-logo {
@@ -253,7 +305,7 @@
     margin-bottom: 1px;
   }
   .room-item:hover, .user-item:hover { background: var(--panel); }
-  .room-item.active { background: #1e3a6e; color: var(--accent); }
+  .room-item.active { background: var(--accent-soft); color: var(--accent-text); }
 
   .room-icon {
     width: 22px; height: 22px;
@@ -263,12 +315,12 @@
     font-size: 11px;
     flex-shrink: 0;
   }
-  .room-item.active .room-icon { background: #254e99; }
+  .room-item.active .room-icon { background: var(--accent-mid); }
 
   .room-meta { flex: 1; min-width: 0; }
   .room-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .room-topic { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .room-item.active .room-topic { color: #89aff5; }
+  .room-item.active .room-topic { color: var(--accent-text); }
 
   .room-badge {
     font-size: 10px;
@@ -341,103 +393,6 @@
     font-family: var(--font-ui);
   }
   .header-btn:hover { background: var(--border); color: var(--text); }
-  .header-btn.active {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border-color: transparent;
-    color: white;
-  }
-
-
-  /* ── Lofi playlist player ── */
-  .music-player {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    min-width: 0;
-    padding: 4px 6px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-  }
-
-  .music-track-info {
-    width: 112px;
-    min-width: 0;
-    padding: 0 4px;
-  }
-
-  .music-track-label {
-    color: var(--muted);
-    font-size: 9px;
-    line-height: 1.1;
-    letter-spacing: .5px;
-    text-transform: uppercase;
-  }
-
-  .music-track-title {
-    overflow: hidden;
-    color: var(--text);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.3;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .music-control {
-    width: 29px;
-    height: 29px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 13px;
-    transition: all var(--transition);
-  }
-
-  .music-control:hover {
-    background: var(--border);
-    color: var(--text);
-  }
-
-  .music-control.primary {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white;
-  }
-
-  .music-volume-wrap {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding-left: 2px;
-  }
-
-  .music-volume-icon {
-    width: 18px;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 12px;
-    text-align: center;
-  }
-
-  .music-volume {
-    width: 64px;
-    cursor: pointer;
-    accent-color: var(--accent);
-  }
-
-  @media (max-width: 1120px) {
-    .music-track-info { display: none; }
-    .music-volume { width: 45px; }
-  }
-
-  @media (max-width: 900px) {
-    .music-volume-wrap { display: none; }
-  }
 
   /* ── Messages ── */
   #messages {
@@ -494,7 +449,7 @@
     margin-bottom: 3px;
     padding: 0 2px;
   }
-  .msg-row.me .msg-sender { text-align: right; color: #89aff5; }
+  .msg-row.me .msg-sender { text-align: right; color: var(--accent-text); }
 
   .msg-ts {
     font-size: 9px;
@@ -524,8 +479,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #1a2a1a;
-    border: 1px solid #34d39933;
+    background: var(--status-bg);
+    border: 1px solid var(--status-border);
     border-radius: var(--radius);
     padding: 10px 14px;
     margin: 8px 0;
@@ -539,14 +494,14 @@
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    background: #2a1a3a;
+    background: var(--pm-bg);
     border: 1px solid var(--accent2)44;
     border-radius: var(--radius);
     padding: 10px 14px;
     margin: 6px 0;
   }
   .msg-pm .pm-icon { font-size: 16px; }
-  .msg-pm .pm-text { font-size: 12.5px; color: #c4b0f0; line-height: 1.5; }
+  .msg-pm .pm-text { font-size: 12.5px; color: var(--pm-text); line-height: 1.5; }
   .msg-pm .pm-sender { font-weight: 700; color: var(--accent2); }
 
   /* History msg */
@@ -557,6 +512,7 @@
 
   /* ── Input bar ── */
   .input-bar {
+    position: relative;
     padding: 12px 16px;
     background: var(--surface);
     border-top: 1px solid var(--border);
@@ -598,10 +554,250 @@
   .send-btn:hover { opacity: 0.85; transform: scale(1.05); }
   .send-btn:active { transform: scale(0.96); }
 
+
+  /* Perbaikan wrapping bubble */
+  .msg-row > div:last-child {
+    min-width: 0;
+    max-width: 65%;
+  }
+  .msg-row.me > div:last-child { text-align: right; }
+  .msg-row.me .msg-ts { text-align: right; }
+  .msg-group:has(.msg-row.me) .msg-sender { align-self: flex-end; }
+  .msg-bubble {
+    max-width: none;
+    width: fit-content;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    white-space: pre-wrap;
+  }
+
+  /* Voice message */
+  .voice-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    font-size: 17px;
+    transition: all var(--transition);
+  }
+  .voice-btn:hover { color: var(--text); background: var(--border); }
+  .voice-btn.recording {
+    color: white;
+    border-color: #ef4444;
+    background: #ef4444;
+    animation: recordingPulse 1s infinite;
+  }
+  @keyframes recordingPulse {
+    0%, 100% { box-shadow: 0 0 0 0 #ef444455; }
+    50% { box-shadow: 0 0 0 7px #ef444400; }
+  }
+  .recording-status {
+    display: none;
+    min-width: 72px;
+    color: #f87171;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .recording-status.active { display: inline; }
+  .msg-voice-bubble {
+    min-width: 245px;
+    max-width: 360px;
+    background: var(--bubble-them);
+    border-radius: 14px 14px 14px 4px;
+    padding: 10px 12px;
+  }
+  .msg-row.me .msg-voice-bubble {
+    background: var(--bubble-me);
+    border-radius: 14px 14px 4px 14px;
+  }
+  .msg-voice-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .msg-voice-bubble audio {
+    display: block;
+    width: 100%;
+    height: 34px;
+  }
+  .msg-voice-history { opacity: .65; }
+
+  /* File transfer */
+  .composer-tool-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    font-size: 17px;
+    transition: all var(--transition);
+  }
+  .composer-tool-btn:hover, .composer-tool-btn.active {
+    color: var(--text);
+    background: var(--border);
+  }
+  .emoji-picker {
+    display: none;
+    position: absolute;
+    left: 60px;
+    bottom: 62px;
+    z-index: 30;
+    width: 248px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 12px 35px var(--shadow);
+    grid-template-columns: repeat(6, 1fr);
+    gap: 5px;
+  }
+  .emoji-picker.open { display: grid; }
+  .emoji-picker button {
+    height: 32px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 19px;
+  }
+  .emoji-picker button:hover { background: var(--border); }
+  .msg-file-bubble {
+    min-width: 250px;
+    max-width: 380px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px 14px 14px 4px;
+    background: var(--bubble-them);
+  }
+  .msg-row.me .msg-file-bubble {
+    border-radius: 14px 14px 4px 14px;
+    background: var(--bubble-me);
+  }
+  .file-icon {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--glass);
+    font-size: 20px;
+  }
+  .file-meta { min-width: 0; flex: 1; }
+  .file-name {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-size { margin-top: 2px; color: var(--muted); font-size: 10px; }
+  .file-download {
+    flex-shrink: 0;
+    padding: 6px 9px;
+    border: 1px solid var(--glass-border);
+    border-radius: 7px;
+    color: white;
+    background: var(--glass);
+    font-size: 11px;
+    text-decoration: none;
+  }
+  .file-download:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .msg-file-history { opacity: .65; }
+
+  /* Emoji reactions */
+  .reaction-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 20px;
+    margin-top: 4px;
+  }
+  .msg-row.me .reaction-bar { justify-content: flex-end; }
+  .reaction-chip, .reaction-add, .reaction-option {
+    height: 22px;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+  }
+  .reaction-chip:hover, .reaction-add:hover, .reaction-option:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .reaction-chip.active {
+    color: white;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .reaction-options { display: none; align-items: center; gap: 3px; }
+  .reaction-options.open { display: flex; }
+  .reaction-option { width: 25px; padding: 0; }
+
+  /* Music playlist */
+  .music-player {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 5px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel);
+  }
+  .music-track-title {
+    width: 92px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .music-control {
+    width: 27px;
+    height: 27px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .music-control:hover { background: var(--border); color: var(--text); }
+  .music-control.primary { background: linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+  .music-volume { width: 55px; accent-color: var(--accent); }
+
+  @media (max-width: 1100px) {
+    .music-track-title, .music-volume { display:none; }
+  }
+
   /* ── Create room modal ── */
   .modal-overlay {
     position: fixed; inset: 0;
-    background: #00000088;
+    background: var(--overlay);
     display: none;
     place-items: center;
     z-index: 100;
@@ -614,7 +810,7 @@
     border-radius: 14px;
     padding: 28px 32px;
     width: 360px;
-    box-shadow: 0 20px 60px #00000077;
+    box-shadow: 0 20px 60px var(--shadow);
   }
   .modal h2 { font-size: 16px; margin-bottom: 20px; }
   .modal .field { margin-bottom: 14px; }
@@ -637,15 +833,167 @@
   @media (max-width: 640px) {
     .sidebar { width: 220px; min-width: 220px; }
   }
+
+
+  /* ── Final chat layout fix: prevents one-letter-per-line bubbles ── */
+  .msg-group {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .msg-group.me-group {
+    align-items: flex-end;
+  }
+
+  .msg-row {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .msg-row.me {
+    flex-direction: row-reverse;
+  }
+
+  .msg-content {
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    max-width: min(70%, 760px);
+  }
+
+  .msg-row.me .msg-content {
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .msg-bubble {
+    display: block;
+    width: max-content;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  .msg-voice-bubble {
+    width: min(330px, 100%);
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .msg-voice-bubble audio {
+    width: 100%;
+    min-width: 220px;
+    max-width: 100%;
+  }
+
+  .msg-sender {
+    max-width: min(70%, 760px);
+  }
+
+  .msg-group.me-group .msg-sender {
+    align-self: flex-end;
+    text-align: right;
+    color: var(--accent-text);
+  }
+
+  .user-empty {
+    padding: 8px 10px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  /* ── Logo and theme toggle ── */
+  html, body, .sidebar, .chat-header, .input-bar, .login-card, .modal,
+  .room-item, .user-item, .msg-bubble, .music-player, input, textarea, button {
+    transition: background-color var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+  }
+
+  .brand-logo {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .login-logo .icon,
+  .sidebar-logo .icon {
+    overflow: hidden;
+    background: transparent;
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+
+  .login-logo .icon { width: 54px; height: 54px; border-radius: 14px; }
+  .sidebar-logo .icon { width: 34px; height: 34px; border-radius: 9px; }
+
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 38px;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .theme-toggle:hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  }
+
+  .login-theme-toggle {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 20;
+  }
+
+  :root[data-theme="light"] .btn-primary,
+  :root[data-theme="light"] .send-btn,
+  :root[data-theme="light"] .music-control.primary,
+  :root[data-theme="light"] .me-status-edit button {
+    color: #2f1d0c;
+  }
+
+  :root[data-theme="light"] .msg-row.me .msg-bubble {
+    color: #31200d;
+  }
+
+  :root[data-theme="light"] .login-card,
+  :root[data-theme="light"] .modal {
+    box-shadow: 0 22px 60px var(--shadow);
+  }
+
+  @media (max-width: 700px) {
+    .msg-content,
+    .msg-sender {
+      max-width: 84%;
+    }
+  }
+
 </style>
 </head>
 <body>
 
 <!-- ── Login ── -->
 <div id="login-screen">
+  <button class="theme-toggle login-theme-toggle" id="login-theme-btn" onclick="toggleTheme()" title="Ganti light/dark mode">☀️ Light</button>
   <div class="login-card">
     <div class="login-logo">
-      <div class="icon">📚</div>
+      <div class="icon"><img class="brand-logo" src="assets/studibudi-logo.png" alt="Logo StudiBudi"></div>
       <h1>Studi<span>Budi</span></h1>
     </div>
     <p class="login-tagline">Temukan teman belajar secara real-time.<br>Broadcast topikmu, join diskusi, belajar bareng.</p>
@@ -668,7 +1016,7 @@
   <div class="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <div class="icon">📚</div>
+        <div class="icon"><img class="brand-logo" src="assets/studibudi-logo.png" alt="Logo StudiBudi"></div>
         <span>StudiBudi</span>
       </div>
       <div class="conn-dot" id="conn-dot"></div>
@@ -712,19 +1060,15 @@
       </div>
       <div class="header-actions">
         <div class="music-player" title="Lofi playlist">
-          <div class="music-track-info">
-            <div class="music-track-label">Now playing</div>
-            <div class="music-track-title" id="music-track-title">tokyo-music</div>
-          </div>
-          <button class="music-control" onclick="previousTrack()" title="Lagu sebelumnya">⏮</button>
+          <span class="music-track-title" id="music-track-title">tokyo-music</span>
+          <button class="music-control" onclick="previousTrack()" title="Sebelumnya">⏮</button>
           <button class="music-control primary" id="music-play-btn" onclick="toggleMusic()" title="Putar">▶</button>
-          <button class="music-control" onclick="stopMusic()" title="Stop dan kembali ke awal lagu">⏹</button>
-          <button class="music-control" onclick="nextTrack()" title="Lagu berikutnya">⏭</button>
-          <div class="music-volume-wrap">
-            <span class="music-volume-icon" id="music-volume-icon" onclick="toggleMute()" title="Mute/unmute">🔉</span>
-            <input class="music-volume" id="music-volume" type="range" min="0" max="1" step="0.05" value="0.25" oninput="setMusicVolume(this.value)" title="Volume">
-          </div>
+          <button class="music-control" onclick="stopMusic()" title="Stop">⏹</button>
+          <button class="music-control" onclick="nextTrack()" title="Berikutnya">⏭</button>
+          <input class="music-volume" id="music-volume" type="range" min="0" max="1" step="0.05" value="0.25" oninput="setMusicVolume(this.value)" title="Volume musik">
         </div>
+        <button class="theme-toggle" id="app-theme-btn" onclick="toggleTheme()" title="Ganti light/dark mode">☀️ Light</button>
+        <button class="header-btn" id="reconnect-btn" onclick="reconnectNow()" style="display:none" title="Sambungkan kembali ke server">🔌 Sambungkan</button>
         <button class="header-btn" onclick="sendCmd('/rooms')">🔄 Refresh</button>
         <button class="header-btn" onclick="sendCmd('/online')">👥 Online</button>
         <button class="header-btn" id="leave-btn" onclick="leaveRoom()" style="display:none">← Tinggalkan</button>
@@ -734,13 +1078,17 @@
     <div id="messages"></div>
 
     <div class="input-bar">
-      <textarea id="msg-input" rows="1" placeholder="Ketik pesan atau /help untuk daftar perintah…"></textarea>
+      <button class="voice-btn" id="voice-btn" onclick="toggleVoiceRecording()" title="Rekam voice message">🎙️</button>
+      <span class="recording-status" id="recording-status">REC 00:00</span>
+      <button class="composer-tool-btn" id="emoji-btn" onclick="toggleEmojiPicker(event)" title="Pilih emoji">😊</button>
+      <button class="composer-tool-btn" onclick="document.getElementById('file-input').click()" title="Kirim file maksimal 4 MB">📎</button>
+      <input id="file-input" type="file" hidden onchange="handleSelectedFile(event)">
+      <div class="emoji-picker" id="emoji-picker"></div>
+      <textarea id="msg-input" rows="1" placeholder="Ketik pesan, emoji, kirim file, atau voice message…"></textarea>
       <button class="send-btn" onclick="sendMsg()">➤</button>
     </div>
   </div>
 </div>
-
-<audio id="lofi-audio" preload="metadata"></audio>
 
 <!-- Create room modal -->
 <div class="modal-overlay" id="create-modal">
@@ -761,159 +1109,389 @@
   </div>
 </div>
 
+<audio id="lofi-audio" preload="metadata"></audio>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────
 let ws = null;
 let myUsername = '';
 let currentRoom = 'lobby';
-let onlineUsers = {};    // username -> status
-let rooms = [];          // [{name, members, topic}]
-let authState = 'idle';  // 'idle' | 'username' | 'password' | 'done'
-const WS_URL = `ws://${location.hostname}:8765`;
+let onlineUsers = {};
+let rooms = [];
+let authState = 'idle';
+let onlineRefreshTimer = null;
+let sessionPassword = '';
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let reconnectInProgress = false;
+let allowReconnect = false;
+const MAX_RECONNECT_ATTEMPTS = 8;
+const WS_HOST = location.hostname || '127.0.0.1';
+const WS_URL = `ws://${WS_HOST}:8765`;
+const MAX_FILE_SIZE = 4 * 1024 * 1024;
+const MESSAGE_REACTIONS = ['👍','❤️','😂','🎉','😮','😢'];
+const COMPOSER_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😎','🤔','😭','😡','👍','👎','👏','🙌','🙏','💪','❤️','💙','🔥','✨','🎉','✅','📚'];
 
-// ── Login flow ─────────────────────────────────────────────────────────
-function setLoginStatus(msg, cls = '') {
-  const el = document.getElementById('login-status');
-  el.textContent = msg;
-  el.className = cls;
+
+// ── Theme ──────────────────────────────────────────────────────────────
+function currentTheme() {
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+}
+
+function applyTheme(theme) {
+  const safeTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = safeTheme;
+  localStorage.setItem('studibudiTheme', safeTheme);
+  updateThemeButtons();
+}
+
+function toggleTheme() {
+  applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+}
+
+function updateThemeButtons() {
+  const nextLabel = currentTheme() === 'dark' ? '☀️ Light' : '🌙 Dark';
+  ['login-theme-btn', 'app-theme-btn'].forEach(id => {
+    const button = document.getElementById(id);
+    if (button) button.textContent = nextLabel;
+  });
+}
+
+updateThemeButtons();
+
+// ── Login and reconnection ─────────────────────────────────────────────
+function setLoginStatus(message, className = '') {
+  const element = document.getElementById('login-status');
+  element.textContent = message;
+  element.className = className;
+}
+
+function resetLoginButton() {
+  document.getElementById('login-btn').disabled = false;
 }
 
 function doLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value.trim();
-  if (!user || !pass) { setLoginStatus('Username dan password wajib diisi.', 'error'); return; }
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value.trim();
+  if (!username || !password) {
+    setLoginStatus('Username dan password wajib diisi.', 'error');
+    return;
+  }
 
   document.getElementById('login-btn').disabled = true;
   setLoginStatus('Menghubungkan ke server…');
+  myUsername = username;
+  sessionPassword = password;
+  allowReconnect = false;
+  reconnectAttempts = 0;
+  connectAndAuthenticate(false);
+}
 
-  myUsername = user;
-  ws = new WebSocket(WS_URL);
+function connectAndAuthenticate(isReconnect = false) {
+  if (!myUsername || !sessionPassword) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+  reconnectInProgress = isReconnect;
   authState = 'idle';
 
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch (_) {
+    handleConnectionFailure(isReconnect, 'Alamat WebSocket tidak valid.');
+    return;
+  }
+
   ws.onopen = () => {
-    setLoginStatus('Terhubung. Melakukan autentikasi…', 'ok');
-  };
-
-  ws.onmessage = (ev) => {
-    const pkt = JSON.parse(ev.data);
-    const t = pkt.type;
-    const text = pkt.payload?.text || '';
-
-    if (authState === 'idle' && t === 'prompt' && text.toLowerCase().includes('username')) {
-      authState = 'username';
-      sendRaw(user);
-      return;
-    }
-    if (authState === 'username' && t === 'prompt' && text.toLowerCase().includes('password')) {
-      authState = 'password';
-      sendRaw(pass);
-      return;
-    }
-    if (authState === 'password') {
-      if (text.includes('ERROR')) {
-        setLoginStatus(text, 'error');
-        document.getElementById('login-btn').disabled = false;
-        ws.close();
-        return;
-      }
-      // auth success
-      authState = 'done';
-      setLoginStatus(text, 'ok');
-      setTimeout(enterApp, 600);
-      return;
-    }
+    if (isReconnect) appendSystem('🔄 Terhubung ke server, melakukan login ulang…');
+    else setLoginStatus('Terhubung. Melakukan autentikasi…', 'ok');
   };
 
   ws.onerror = () => {
-    setLoginStatus('Gagal terhubung ke server. Pastikan server berjalan.', 'error');
-    document.getElementById('login-btn').disabled = false;
+    if (!isReconnect) {
+      setLoginStatus('Gagal terhubung. Pastikan ws_bridge.py berjalan.', 'error');
+      resetLoginButton();
+    }
+  };
+
+  ws.onclose = event => {
+    if (authState !== 'done') {
+      if (!isReconnect) resetLoginButton();
+      else scheduleReconnect(`Login ulang gagal (kode ${event.code || '-'}).`);
+    }
+  };
+
+  ws.onmessage = event => {
+    let packet;
+    try { packet = JSON.parse(event.data); }
+    catch (_) { return; }
+
+    const type = packet.type;
+    const payload = packet.payload || {};
+    const textValue = payload.text || '';
+
+    if (authState === 'idle' && type === 'prompt' && textValue.toLowerCase().includes('username')) {
+      authState = 'username';
+      sendRaw(myUsername);
+      return;
+    }
+    if (authState === 'username' && type === 'prompt' && textValue.toLowerCase().includes('password')) {
+      authState = 'password';
+      sendRaw(sessionPassword);
+      return;
+    }
+    if (authState === 'password' && type === 'auth_result') {
+      if (!payload.success) {
+        const message = payload.message || 'Login gagal.';
+        if (isReconnect) {
+          // Cleanup username di server kadang memerlukan jeda singkat.
+          try { ws.close(); } catch (_) {}
+          scheduleReconnect(message);
+        } else {
+          setLoginStatus(message, 'error');
+          resetLoginButton();
+          allowReconnect = false;
+          try { ws.close(); } catch (_) {}
+        }
+        return;
+      }
+
+      authState = 'done';
+      reconnectAttempts = 0;
+      reconnectInProgress = false;
+      allowReconnect = true;
+      if (!isReconnect) setLoginStatus(payload.message || 'Login berhasil.', 'ok');
+      enterApp(isReconnect);
+    }
   };
 }
 
-function enterApp() {
+function enterApp(isReconnect = false) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
   document.getElementById('me-name').textContent = myUsername;
   document.getElementById('conn-dot').classList.add('connected');
+  document.getElementById('reconnect-btn').style.display = 'none';
 
-  // Re-bind ws.onmessage for chat
   ws.onmessage = handleMessage;
-  ws.onclose = () => {
-    document.getElementById('conn-dot').classList.remove('connected');
-    appendSystem('❌ Terputus dari server.');
-  };
 
-  // Request room list
-  sendCmd('/rooms');
-  sendCmd('/online');
+  if (!isReconnect) {
+    onlineUsers = { [myUsername]: 'Belum set status belajar' };
+    renderUsers();
+  } else {
+    appendSystem('✅ Tersambung kembali ke server.');
+  }
+
+  const roomBeforeReconnect = currentRoom;
+  if (isReconnect) setCurrentRoom('lobby');
+  const refreshInitialData = () => {
+    sendCmd('/rooms');
+    sendCmd('/online');
+  };
+  refreshInitialData();
+  setTimeout(refreshInitialData, 300);
+  setTimeout(refreshInitialData, 1000);
+
+  // Setelah koneksi ulang, server menempatkan user di lobby. Coba masuk lagi
+  // ke room sebelumnya bila room tersebut masih tersedia.
+  if (isReconnect && roomBeforeReconnect && roomBeforeReconnect !== 'lobby') {
+    setTimeout(() => sendCmd('/join ' + roomBeforeReconnect), 500);
+  }
+
+  if (onlineRefreshTimer) clearInterval(onlineRefreshTimer);
+  onlineRefreshTimer = setInterval(() => sendCmd('/online'), 10000);
+
+  ws.onclose = event => handleUnexpectedDisconnect(event);
+}
+
+function handleUnexpectedDisconnect(event) {
+  if (onlineRefreshTimer) {
+    clearInterval(onlineRefreshTimer);
+    onlineRefreshTimer = null;
+  }
+  document.getElementById('conn-dot').classList.remove('connected');
+  document.getElementById('reconnect-btn').style.display = '';
+
+  const code = event?.code ? ` (kode ${event.code})` : '';
+  appendSystem(`❌ Terputus dari server${code}. Mencoba menyambung kembali…`);
+  if (allowReconnect) scheduleReconnect();
+}
+
+function handleConnectionFailure(isReconnect, message) {
+  if (isReconnect) scheduleReconnect(message);
+  else {
+    setLoginStatus(message, 'error');
+    resetLoginButton();
+  }
+}
+
+function scheduleReconnect(reason = '') {
+  if (!allowReconnect || reconnectTimer) return;
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    appendSystem('⚠️ Sambungan otomatis gagal. Jalankan kembali server lalu klik “Sambungkan”.');
+    document.getElementById('reconnect-btn').style.display = '';
+    return;
+  }
+
+  reconnectAttempts += 1;
+  const delay = Math.min(1500 * reconnectAttempts, 8000);
+  if (reason) appendSystem(`🔄 ${reason} Mencoba lagi dalam ${Math.ceil(delay / 1000)} detik…`);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectAndAuthenticate(true);
+  }, delay);
+}
+
+function reconnectNow() {
+  if (!myUsername || !sessionPassword) {
+    location.reload();
+    return;
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectAttempts = 0;
+  allowReconnect = true;
+  document.getElementById('reconnect-btn').style.display = 'none';
+  appendSystem('🔌 Menyambungkan kembali ke server…');
+  connectAndAuthenticate(true);
 }
 
 // ── WebSocket helpers ──────────────────────────────────────────────────
-function sendRaw(text) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'input', payload: { text } }) + '\n');
+function sendPacket(type, payload) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  try {
+    ws.send(JSON.stringify({ type, payload }) + '\n');
+    return true;
+  } catch (_) {
+    return false;
   }
 }
-function sendCmd(cmd) { sendRaw(cmd); }
+
+function sendRaw(textValue) {
+  return sendPacket('input', { text: textValue });
+}
+
+function sendCmd(command) {
+  return sendRaw(command);
+}
 
 // ── Message handler ────────────────────────────────────────────────────
-function handleMessage(ev) {
-  let pkt;
-  try { pkt = JSON.parse(ev.data); } catch { return; }
+function handleMessage(event) {
+  let packet;
+  try { packet = JSON.parse(event.data); }
+  catch (_) {
+    appendSystem('⚠️ Pesan server tidak dapat dibaca.');
+    return;
+  }
 
-  const t = pkt.type;
-  const payload = pkt.payload || {};
+  const type = packet.type;
+  const payload = packet.payload || {};
 
-  if (t === 'system') {
-    const txt = payload.text || '';
-    // Intercept join/leave confirmations to update header
-    if (txt.startsWith('Joined room') || txt.startsWith('Left ')) {
-      const match = txt.match(/Joined room '(.+?)'/);
-      if (match) setCurrentRoom(match[1]);
-      else if (txt.includes('lobby')) setCurrentRoom('lobby');
-    }
-    appendSystem(txt);
-    // refresh after join/leave
-    if (txt.includes('Joined') || txt.includes('Left')) {
-      sendCmd('/rooms');
-    }
-  } else if (t === 'chat') {
-    const sender = pkt.sender || payload.sender;
-    const text   = payload.text || '';
-    const ts     = pkt.timestamp || payload.timestamp || '';
-    const room   = pkt.room || payload.room || currentRoom;
-    appendChat(sender, text, ts, sender === myUsername);
-  } else if (t === 'history') {
-    const sender = payload.sender;
-    const text   = payload.text;
-    const ts     = payload.timestamp;
-    appendChatHistory(sender, text, ts);
-  } else if (t === 'pm') {
-    const sender = payload.sender;
-    const text   = payload.text;
-    const ts     = payload.timestamp || '';
-    appendPM(sender, text, ts);
-  } else if (t === 'rooms') {
-    rooms = payload.rooms || [];
+  if (type === 'system') {
+    appendSystem(payload.text || '');
+  } else if (type === 'room_joined') {
+    setCurrentRoom(payload.room || packet.room || 'lobby', payload.topic || '');
+    appendSystem(payload.text || 'Berhasil berpindah room.');
+    sendCmd('/rooms');
+    sendCmd('/online');
+  } else if (type === 'chat') {
+    const sender = packet.sender || payload.sender || 'Unknown';
+    appendChat(sender, payload.text || '', payload.timestamp || packet.timestamp || '', sender === myUsername, payload.message_id || '', payload.reactions || {});
+  } else if (type === 'history') {
+    appendChatHistory(payload.sender || packet.sender || 'Unknown', payload.text || '', payload.timestamp || packet.timestamp || '', payload.message_id || '', payload.reactions || {});
+  } else if (type === 'voice') {
+    appendVoiceMessage(
+      packet.sender || 'Unknown',
+      payload.audio || '',
+      payload.mime_type || 'audio/webm',
+      Number(payload.duration_ms) || 0,
+      payload.timestamp || packet.timestamp || '',
+      packet.sender === myUsername,
+      Boolean(payload.history),
+      payload.message_id || '',
+      payload.reactions || {}
+    );
+  } else if (type === 'file') {
+    appendFileMessage(
+      packet.sender || 'Unknown',
+      payload.filename || 'file',
+      payload.mime_type || 'application/octet-stream',
+      payload.data || '',
+      Number(payload.size) || 0,
+      payload.timestamp || packet.timestamp || '',
+      packet.sender === myUsername,
+      Boolean(payload.history),
+      payload.message_id || '',
+      payload.reactions || {}
+    );
+  } else if (type === 'reaction_update') {
+    updateMessageReactions(payload.message_id || '', payload.reactions || {});
+  } else if (type === 'pm') {
+    appendPM(payload.sender || packet.sender || 'Unknown', payload.text || '', payload.timestamp || packet.timestamp || '');
+  } else if (type === 'rooms') {
+    rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
     renderRooms();
-  } else if (t === 'status_update') {
-    const uname  = payload.username;
-    const status = payload.status;
-    const ts     = payload.timestamp || '';
-    onlineUsers[uname] = status;
+    refreshCurrentRoomHeader();
+  } else if (type === 'online_users') {
+    onlineUsers = {};
+    (Array.isArray(payload.users) ? payload.users : []).forEach(user => {
+      if (user && user.username) onlineUsers[user.username] = user.status || '(no status)';
+    });
     renderUsers();
-    appendStatusBroadcast(uname, status, ts);
-    if (uname === myUsername) {
-      document.getElementById('me-status-display').textContent = '📚 ' + status;
+  } else if (type === 'status_update') {
+    const username = payload.username;
+    if (!username) return;
+    onlineUsers[username] = payload.status || '(no status)';
+    renderUsers();
+    appendStatusBroadcast(username, payload.status || '(no status)', payload.timestamp || packet.timestamp || '');
+    if (username === myUsername) {
+      document.getElementById('me-status-display').textContent = '📚 ' + payload.status;
     }
   }
 }
 
-// ── Rendering helpers ──────────────────────────────────────────────────
+// ── Rendering ──────────────────────────────────────────────────────────
 const messagesEl = document.getElementById('messages');
 
 function scrollBottom() {
   setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 10);
+}
+
+function esc(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function avatarColor(sender) {
+  const colors = ['#e74c3c','#e67e22','#2ecc71','#1abc9c','#9b59b6','#3498db'];
+  const index = [...String(sender)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length;
+  return colors[index];
+}
+
+function createMessageShell(sender, isMe, messageId = '') {
+  const group = document.createElement('div');
+  group.className = 'msg-group' + (isMe ? ' me-group' : '');
+  if (messageId) group.dataset.messageId = messageId;
+
+  const senderElement = document.createElement('div');
+  senderElement.className = 'msg-sender';
+  senderElement.textContent = isMe ? 'Kamu' : sender;
+
+  const row = document.createElement('div');
+  row.className = 'msg-row' + (isMe ? ' me' : '');
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.textContent = (sender || '?')[0].toUpperCase();
+  avatar.style.background = isMe ? 'linear-gradient(135deg,var(--accent),var(--accent2))' : avatarColor(sender);
+
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+  row.appendChild(avatar);
+  row.appendChild(content);
+  group.appendChild(senderElement);
+  group.appendChild(row);
+  return { group, content };
 }
 
 function appendSystem(text) {
@@ -924,325 +1502,249 @@ function appendSystem(text) {
   scrollBottom();
 }
 
-function appendChat(sender, text, ts, isMe) {
-  const group = document.createElement('div');
-  group.className = 'msg-group';
-
-  const senderEl = document.createElement('div');
-  senderEl.className = 'msg-sender';
-  senderEl.textContent = isMe ? 'Kamu' : sender;
-
-  const row = document.createElement('div');
-  row.className = 'msg-row' + (isMe ? ' me' : '');
-
-  const avatar = document.createElement('div');
-  avatar.className = 'msg-avatar';
-  avatar.textContent = (sender || '?')[0].toUpperCase();
-  if (isMe) {
-    avatar.style.background = 'linear-gradient(135deg,#4f8ef7,#7c5cfc)';
-  } else {
-    // deterministic color per user
-    const colors = ['#e74c3c','#e67e22','#2ecc71','#1abc9c','#9b59b6','#3498db'];
-    const idx = [...sender].reduce((a,c)=>a+c.charCodeAt(0),0) % colors.length;
-    avatar.style.background = colors[idx];
-  }
-
+function appendChat(sender, text, timestamp, isMe, messageId = '', reactions = {}) {
+  const shell = createMessageShell(sender, isMe, messageId);
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
   bubble.textContent = text;
-
-  const tsEl = document.createElement('div');
-  tsEl.className = 'msg-ts';
-  tsEl.textContent = ts ? ts.slice(11,16) : '';
-
-  row.appendChild(avatar);
-  const wrap = document.createElement('div');
-  wrap.appendChild(bubble);
-  wrap.appendChild(tsEl);
-  row.appendChild(wrap);
-
-  group.appendChild(senderEl);
-  group.appendChild(row);
-  messagesEl.appendChild(group);
+  const time = document.createElement('div');
+  time.className = 'msg-ts';
+  time.textContent = timestamp ? timestamp.slice(11, 16) : '';
+  shell.content.appendChild(bubble);
+  shell.content.appendChild(time);
+  if (messageId && sender !== 'System') attachReactionControls(shell.content, messageId, reactions);
+  messagesEl.appendChild(shell.group);
   scrollBottom();
 }
 
-function appendChatHistory(sender, text, ts) {
-  const group = document.createElement('div');
-  group.className = 'msg-group';
-
-  const row = document.createElement('div');
-  row.className = 'msg-row msg-history';
-
-  const avatar = document.createElement('div');
-  avatar.className = 'msg-avatar';
-  avatar.style.opacity = '0.5';
-  avatar.textContent = (sender||'?')[0].toUpperCase();
-
+function appendChatHistory(sender, text, timestamp, messageId = '', reactions = {}) {
+  const shell = createMessageShell(sender, sender === myUsername, messageId);
+  shell.group.classList.add('msg-history');
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  bubble.style.opacity = '0.6';
   bubble.textContent = text;
-
-  const tsEl = document.createElement('div');
-  tsEl.className = 'msg-ts';
-  tsEl.textContent = (ts ? ts.slice(11,16) : '') + ' · riwayat';
-
-  row.appendChild(avatar);
-  const wrap = document.createElement('div');
-  wrap.appendChild(bubble);
-  wrap.appendChild(tsEl);
-  row.appendChild(wrap);
-
-  group.appendChild(row);
-  messagesEl.appendChild(group);
+  const time = document.createElement('div');
+  time.className = 'msg-ts';
+  time.textContent = (timestamp ? timestamp.slice(11, 16) : '') + ' · riwayat';
+  shell.content.appendChild(bubble);
+  shell.content.appendChild(time);
+  if (messageId && sender !== 'System') attachReactionControls(shell.content, messageId, reactions);
+  messagesEl.appendChild(shell.group);
   scrollBottom();
 }
 
-function appendStatusBroadcast(uname, status, ts) {
+function appendVoiceMessage(sender, audioBase64, mimeType, durationMs, timestamp, isMe, isHistory, messageId = '', reactions = {}) {
+  if (!audioBase64) return;
+  const shell = createMessageShell(sender, isMe, messageId);
+  if (isHistory) shell.group.classList.add('msg-voice-history');
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-voice-bubble';
+
+  const label = document.createElement('div');
+  label.className = 'msg-voice-label';
+  const seconds = Math.max(0, Math.round(durationMs / 1000));
+  label.innerHTML = `<span>🎙️ Voice message</span><span>${formatDuration(seconds)}${isHistory ? ' · riwayat' : ''}</span>`;
+
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.preload = 'metadata';
+  audio.src = `data:${mimeType};base64,${audioBase64}`;
+
+  const time = document.createElement('div');
+  time.className = 'msg-ts';
+  time.textContent = timestamp ? timestamp.slice(11, 16) : '';
+
+  bubble.appendChild(label);
+  bubble.appendChild(audio);
+  shell.content.appendChild(bubble);
+  shell.content.appendChild(time);
+  if (messageId) attachReactionControls(shell.content, messageId, reactions);
+  messagesEl.appendChild(shell.group);
+  scrollBottom();
+}
+
+function appendFileMessage(sender, filename, mimeType, dataBase64, size, timestamp, isMe, isHistory, messageId = '', reactions = {}) {
+  if (!dataBase64) return;
+  const shell = createMessageShell(sender, isMe, messageId);
+  if (isHistory) shell.group.classList.add('msg-file-history');
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-file-bubble';
+
+  const icon = document.createElement('div');
+  icon.className = 'file-icon';
+  icon.textContent = fileIconForMime(mimeType, filename);
+
+  const meta = document.createElement('div');
+  meta.className = 'file-meta';
+  const name = document.createElement('div');
+  name.className = 'file-name';
+  name.textContent = filename;
+  name.title = filename;
+  const sizeElement = document.createElement('div');
+  sizeElement.className = 'file-size';
+  sizeElement.textContent = `${formatFileSize(size)}${isHistory ? ' · riwayat' : ''}`;
+  meta.appendChild(name);
+  meta.appendChild(sizeElement);
+
+  const download = document.createElement('a');
+  download.className = 'file-download';
+  download.href = `data:${mimeType};base64,${dataBase64}`;
+  download.download = filename;
+  download.textContent = 'Unduh';
+
+  const time = document.createElement('div');
+  time.className = 'msg-ts';
+  time.textContent = timestamp ? timestamp.slice(11, 16) : '';
+
+  bubble.appendChild(icon);
+  bubble.appendChild(meta);
+  bubble.appendChild(download);
+  shell.content.appendChild(bubble);
+  shell.content.appendChild(time);
+  if (messageId) attachReactionControls(shell.content, messageId, reactions);
+  messagesEl.appendChild(shell.group);
+  scrollBottom();
+}
+
+function fileIconForMime(mimeType, filename) {
+  if (mimeType.startsWith('image/')) return '🖼️';
+  if (mimeType.startsWith('audio/')) return '🎵';
+  if (mimeType.startsWith('video/')) return '🎬';
+  if (mimeType.includes('pdf')) return '📕';
+  if (/\.(zip|rar|7z)$/i.test(filename)) return '🗜️';
+  if (/\.(doc|docx|odt)$/i.test(filename)) return '📘';
+  if (/\.(xls|xlsx|csv)$/i.test(filename)) return '📊';
+  return '📎';
+}
+
+function formatFileSize(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function attachReactionControls(content, messageId, reactions = {}) {
+  const bar = document.createElement('div');
+  bar.className = 'reaction-bar';
+  bar.dataset.messageId = messageId;
+  content.appendChild(bar);
+  renderReactionBar(bar, reactions);
+}
+
+function renderReactionBar(bar, reactions = {}) {
+  const messageId = bar.dataset.messageId;
+  bar.innerHTML = '';
+
+  Object.entries(reactions).forEach(([emoji, users]) => {
+    const names = Array.isArray(users) ? users : [];
+    if (!names.length) return;
+    const button = document.createElement('button');
+    button.className = 'reaction-chip' + (names.includes(myUsername) ? ' active' : '');
+    button.textContent = `${emoji} ${names.length}`;
+    button.title = names.join(', ');
+    button.onclick = () => sendReaction(messageId, emoji);
+    bar.appendChild(button);
+  });
+
+  const addButton = document.createElement('button');
+  addButton.className = 'reaction-add';
+  addButton.textContent = '＋😊';
+  addButton.title = 'Tambahkan reaction';
+  bar.appendChild(addButton);
+
+  const options = document.createElement('span');
+  options.className = 'reaction-options';
+  MESSAGE_REACTIONS.forEach(emoji => {
+    const option = document.createElement('button');
+    option.className = 'reaction-option';
+    option.textContent = emoji;
+    option.onclick = () => sendReaction(messageId, emoji);
+    options.appendChild(option);
+  });
+  addButton.onclick = () => options.classList.toggle('open');
+  bar.appendChild(options);
+}
+
+function updateMessageReactions(messageId, reactions) {
+  if (!messageId) return;
+  document.querySelectorAll('.reaction-bar').forEach(bar => {
+    if (bar.dataset.messageId === messageId) renderReactionBar(bar, reactions);
+  });
+}
+
+function sendReaction(messageId, emoji) {
+  sendPacket('reaction_input', { message_id: messageId, emoji });
+}
+
+function appendStatusBroadcast(username, status) {
   const div = document.createElement('div');
   div.className = 'msg-status-broadcast';
-  div.innerHTML = `
-    <span class="sb-icon">📚</span>
-    <span class="sb-text"><span class="sb-user">${esc(uname)}</span> sekarang belajar: <strong>${esc(status)}</strong></span>
-  `;
+  div.innerHTML = `<span class="sb-icon">📚</span><span class="sb-text"><span class="sb-user">${esc(username)}</span> sekarang belajar: <strong>${esc(status)}</strong></span>`;
   messagesEl.appendChild(div);
   scrollBottom();
 }
 
-function appendPM(sender, text, ts) {
+function appendPM(sender, text) {
   const div = document.createElement('div');
   div.className = 'msg-pm';
-  div.innerHTML = `
-    <span class="pm-icon">💬</span>
-    <span class="pm-text"><span class="pm-sender">${esc(sender)}</span> (pesan pribadi): ${esc(text)}</span>
-  `;
+  div.innerHTML = `<span class="pm-icon">💬</span><span class="pm-text"><span class="pm-sender">${esc(sender)}</span> (pesan pribadi): ${esc(text)}</span>`;
   messagesEl.appendChild(div);
   scrollBottom();
 }
 
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-// ── Sidebar renders ────────────────────────────────────────────────────
 function renderRooms() {
-  const el = document.getElementById('room-list');
-  el.innerHTML = '';
-  rooms.forEach(r => {
+  const element = document.getElementById('room-list');
+  element.innerHTML = '';
+  rooms.forEach(room => {
     const div = document.createElement('div');
-    div.className = 'room-item' + (r.name === currentRoom ? ' active' : '');
-    div.innerHTML = `
-      <div class="room-icon">#</div>
-      <div class="room-meta">
-        <div class="room-name">${esc(r.name)}</div>
-        <div class="room-topic">${esc(r.topic || '-')}</div>
-      </div>
-      <div class="room-badge">${r.members}</div>
-    `;
-    div.onclick = () => joinRoom(r.name);
-    el.appendChild(div);
+    div.className = 'room-item' + (room.name === currentRoom ? ' active' : '');
+    div.innerHTML = `<div class="room-icon">#</div><div class="room-meta"><div class="room-name">${esc(room.name)}</div><div class="room-topic">${esc(room.topic || '-')}</div></div><div class="room-badge">${Number(room.members) || 0}</div>`;
+    div.onclick = () => joinRoom(room.name);
+    element.appendChild(div);
   });
 }
 
 function renderUsers() {
-  const el = document.getElementById('user-list');
-  el.innerHTML = '';
-  Object.entries(onlineUsers).forEach(([u, s]) => {
+  const element = document.getElementById('user-list');
+  element.innerHTML = '';
+  const entries = Object.entries(onlineUsers);
+
+  if (entries.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'user-empty';
+    empty.textContent = 'Memuat pengguna online…';
+    element.appendChild(empty);
+    return;
+  }
+
+  entries.forEach(([username, status]) => {
     const div = document.createElement('div');
     div.className = 'user-item';
-    div.innerHTML = `
-      <div class="user-dot"></div>
-      <div class="user-info">
-        <div class="user-name-text">${esc(u)}${u===myUsername?' (kamu)':''}</div>
-        <div class="user-status-text">${esc(s||'(no status)')}</div>
-      </div>
-    `;
-    el.appendChild(div);
+    div.innerHTML = `<div class="user-dot"></div><div class="user-info"><div class="user-name-text">${esc(username)}${username === myUsername ? ' (kamu)' : ''}</div><div class="user-status-text">${esc(status || '(no status)')}</div></div>`;
+    if (username !== myUsername) {
+      div.title = 'Klik untuk menulis private message';
+      div.onclick = () => {
+        const input = document.getElementById('msg-input');
+        input.value = `/msg ${username} `;
+        input.focus();
+      };
+    }
+    element.appendChild(div);
   });
 }
 
-
-// ── Lofi playlist ─────────────────────────────────────────────────────
-const lofiAudio = document.getElementById('lofi-audio');
-const musicPlayButton = document.getElementById('music-play-btn');
-const musicTrackTitle = document.getElementById('music-track-title');
-const musicVolumeSlider = document.getElementById('music-volume');
-const musicVolumeIcon = document.getElementById('music-volume-icon');
-
-// Nama dasar file mengikuti lagu yang ada di folder assets.
-// Ekstensi dicoba otomatis: mp3, wav, m4a, ogg, aac, dan flac.
-const lofiPlaylist = [
-  { title: 'tokyo-music', base: 'assets/tokyo-music' },
-  { title: 'Late-at-Night', base: 'assets/Late-at-Night' },
-  { title: 'echoes-in-blue', base: 'assets/echoes-in-blue' },
-  { title: 'Heart-Of-The-Ocean', base: 'assets/Heart-Of-The-Ocean' }
-];
-const audioExtensions = ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'];
-
-let currentTrackIndex = 0;
-let currentExtensionIndex = 0;
-let shouldAutoplayAfterLoad = false;
-let failedTrackCount = 0;
-let previousVolume = 0.25;
-let musicErrorShown = false;
-
-function normaliseTrackIndex(index) {
-  return (index + lofiPlaylist.length) % lofiPlaylist.length;
-}
-
-function updateMusicTitle() {
-  const track = lofiPlaylist[currentTrackIndex];
-  musicTrackTitle.textContent = track.title;
-  musicTrackTitle.title = track.title;
-}
-
-function currentAudioSource() {
-  const track = lofiPlaylist[currentTrackIndex];
-  const extension = audioExtensions[currentExtensionIndex];
-  return `${track.base}.${extension}`;
-}
-
-function loadCurrentTrack(autoplay = false) {
-  shouldAutoplayAfterLoad = autoplay;
-  currentExtensionIndex = 0;
-  updateMusicTitle();
-  lofiAudio.src = currentAudioSource();
-  lofiAudio.load();
-}
-
-async function playCurrentTrack() {
-  try {
-    await lofiAudio.play();
-    shouldAutoplayAfterLoad = false;
-  } catch (error) {
-    // Browser dapat menolak autoplay. Klik tombol play akan mencoba kembali.
-    if (error && error.name === 'NotAllowedError') {
-      shouldAutoplayAfterLoad = false;
-    }
-  }
-}
-
-async function toggleMusic() {
-  if (lofiAudio.paused) {
-    if (!lofiAudio.src) {
-      loadCurrentTrack(true);
-    } else {
-      await playCurrentTrack();
-    }
-  } else {
-    lofiAudio.pause();
-  }
-}
-
-function stopMusic() {
-  shouldAutoplayAfterLoad = false;
-  lofiAudio.pause();
-  try {
-    lofiAudio.currentTime = 0;
-  } catch (_) {
-    // Metadata mungkin belum selesai dimuat.
-  }
-}
-
-function nextTrack(forcePlay = !lofiAudio.paused) {
-  currentTrackIndex = normaliseTrackIndex(currentTrackIndex + 1);
-  loadCurrentTrack(forcePlay);
-}
-
-function previousTrack(forcePlay = !lofiAudio.paused) {
-  currentTrackIndex = normaliseTrackIndex(currentTrackIndex - 1);
-  loadCurrentTrack(forcePlay);
-}
-
-function setMusicVolume(value) {
-  const volume = Math.max(0, Math.min(1, Number(value)));
-  lofiAudio.volume = volume;
-  musicVolumeSlider.value = String(volume);
-  if (volume > 0) previousVolume = volume;
-  localStorage.setItem('studibudiMusicVolume', String(volume));
-  updateVolumeIcon();
-}
-
-function toggleMute() {
-  if (lofiAudio.volume > 0) {
-    previousVolume = lofiAudio.volume;
-    setMusicVolume(0);
-  } else {
-    setMusicVolume(previousVolume || 0.25);
-  }
-}
-
-function updateVolumeIcon() {
-  if (lofiAudio.volume === 0) {
-    musicVolumeIcon.textContent = '🔇';
-  } else if (lofiAudio.volume < 0.5) {
-    musicVolumeIcon.textContent = '🔉';
-  } else {
-    musicVolumeIcon.textContent = '🔊';
-  }
-}
-
-function updateMusicButton() {
-  if (lofiAudio.paused) {
-    musicPlayButton.textContent = '▶';
-    musicPlayButton.title = 'Putar';
-  } else {
-    musicPlayButton.textContent = '⏸';
-    musicPlayButton.title = 'Pause';
-  }
-}
-
-lofiAudio.addEventListener('play', updateMusicButton);
-lofiAudio.addEventListener('pause', updateMusicButton);
-
-lofiAudio.addEventListener('loadedmetadata', () => {
-  failedTrackCount = 0;
-  musicErrorShown = false;
-  if (shouldAutoplayAfterLoad) playCurrentTrack();
-});
-
-// Setelah lagu selesai, otomatis lanjut. Sesudah lagu terakhir kembali ke lagu pertama.
-lofiAudio.addEventListener('ended', () => nextTrack(true));
-
-// Jika ekstensi pertama tidak ditemukan, browser mencoba ekstensi umum lainnya.
-lofiAudio.addEventListener('error', () => {
-  if (currentExtensionIndex < audioExtensions.length - 1) {
-    currentExtensionIndex += 1;
-    lofiAudio.src = currentAudioSource();
-    lofiAudio.load();
-    return;
-  }
-
-  failedTrackCount += 1;
-  if (failedTrackCount >= lofiPlaylist.length) {
-    shouldAutoplayAfterLoad = false;
-    updateMusicButton();
-    if (!musicErrorShown) {
-      appendSystem('File musik tidak ditemukan. Pastikan 4 lagu berada di folder assets dan nama filenya sesuai.');
-      musicErrorShown = true;
-    }
-    return;
-  }
-
-  currentTrackIndex = normaliseTrackIndex(currentTrackIndex + 1);
-  currentExtensionIndex = 0;
-  updateMusicTitle();
-  lofiAudio.src = currentAudioSource();
-  lofiAudio.load();
-});
-
-const savedMusicVolume = Number(localStorage.getItem('studibudiMusicVolume'));
-setMusicVolume(Number.isFinite(savedMusicVolume) ? savedMusicVolume : 0.25);
-updateMusicTitle();
-loadCurrentTrack(false);
-
-// ── Actions ───────────────────────────────────────────────────────────
+// ── Text actions ───────────────────────────────────────────────────────
 function sendMsg() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!text) return;
-  sendRaw(text);
+  if (!sendRaw(text)) {
+    appendSystem('Pesan gagal dikirim karena koneksi terputus.');
+    return;
+  }
   input.value = '';
   input.style.height = 'auto';
 }
@@ -1256,54 +1758,375 @@ function sendStatus() {
 }
 
 function joinRoom(name) {
-  if (name === currentRoom) return;
-  sendCmd('/join ' + name);
+  if (name !== currentRoom) sendCmd('/join ' + name);
 }
 
-function leaveRoom() {
-  sendCmd('/leave');
-}
+function leaveRoom() { sendCmd('/leave'); }
 
-function setCurrentRoom(name) {
+function setCurrentRoom(name, topic = '') {
   currentRoom = name;
-  const room = rooms.find(r => r.name === name) || { name, topic: '' };
+  const room = rooms.find(item => item.name === name);
   document.getElementById('room-name-display').textContent = '#' + name;
-  document.getElementById('room-topic-display').textContent = room.topic || '';
+  document.getElementById('room-topic-display').textContent = topic || room?.topic || '';
   document.getElementById('leave-btn').style.display = name === 'lobby' ? 'none' : '';
   document.getElementById('room-icon').textContent = name === 'lobby' ? '🏠' : '📖';
   renderRooms();
 }
 
-// Create modal
+function refreshCurrentRoomHeader() {
+  const room = rooms.find(item => item.name === currentRoom);
+  if (room) document.getElementById('room-topic-display').textContent = room.topic || '';
+}
+
 function openCreateModal() { document.getElementById('create-modal').classList.add('open'); }
 function closeCreateModal() { document.getElementById('create-modal').classList.remove('open'); }
 function createRoom() {
-  const name  = document.getElementById('new-room-name').value.trim().toLowerCase().replace(/\s+/g,'-');
+  const name = document.getElementById('new-room-name').value.trim().toLowerCase().replace(/\s+/g, '-');
   const topic = document.getElementById('new-room-topic').value.trim();
   if (!name || !topic) return;
   sendCmd(`/create ${name} ${topic}`);
   closeCreateModal();
   document.getElementById('new-room-name').value = '';
   document.getElementById('new-room-topic').value = '';
-  setTimeout(() => sendCmd('/rooms'), 400);
+  setTimeout(() => sendCmd('/rooms'), 300);
 }
 
+// ── Emoji and file transfer ────────────────────────────────────────────
+function initialiseEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  picker.innerHTML = '';
+  COMPOSER_EMOJIS.forEach(emoji => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = emoji;
+    button.onclick = event => {
+      event.stopPropagation();
+      insertEmoji(emoji);
+    };
+    picker.appendChild(button);
+  });
+}
+
+function toggleEmojiPicker(event) {
+  event?.stopPropagation();
+  const picker = document.getElementById('emoji-picker');
+  const button = document.getElementById('emoji-btn');
+  const open = picker.classList.toggle('open');
+  button.classList.toggle('active', open);
+}
+
+function closeEmojiPicker() {
+  document.getElementById('emoji-picker').classList.remove('open');
+  document.getElementById('emoji-btn').classList.remove('active');
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById('msg-input');
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+  input.selectionStart = input.selectionEnd = start + emoji.length;
+  input.focus();
+}
+
+async function handleSelectedFile(event) {
+  const input = event.target;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+
+  if (file.size <= 0) {
+    appendSystem('File kosong tidak dapat dikirim.');
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    appendSystem('File terlalu besar. Maksimal 4 MB.');
+    return;
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    appendSystem('File gagal dikirim karena koneksi server terputus.');
+    return;
+  }
+
+  appendSystem(`Mengirim file ${file.name} (${formatFileSize(file.size)})…`);
+  try {
+    const data = await blobToBase64(file);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      appendSystem('File selesai diproses, tetapi koneksi sudah terputus. Sambungkan kembali lalu kirim ulang.');
+      return;
+    }
+    const sent = sendPacket('file_input', {
+      filename: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      size: file.size,
+      data
+    });
+    if (!sent) {
+      appendSystem('File gagal dikirim karena koneksi terputus. Sambungkan kembali lalu kirim ulang.');
+    } else {
+      appendSystem('File sedang diunggah ke server. Tunggu sampai bubble file muncul sebagai konfirmasi.');
+    }
+  } catch (error) {
+    appendSystem('File gagal diproses: ' + (error?.message || 'unknown error'));
+  }
+}
+
+document.addEventListener('click', event => {
+  const picker = document.getElementById('emoji-picker');
+  const button = document.getElementById('emoji-btn');
+  if (!picker.contains(event.target) && !button.contains(event.target)) closeEmojiPicker();
+});
+
+initialiseEmojiPicker();
+
+// ── Voice message recorder ─────────────────────────────────────────────
+let mediaRecorder = null;
+let microphoneStream = null;
+let voiceChunks = [];
+let recordingStartedAt = 0;
+let recordingTimer = null;
+let recordingAutoStop = null;
+const MAX_RECORDING_SECONDS = 60;
+
+function getSupportedVoiceMimeType() {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4'
+  ];
+  if (!window.MediaRecorder) return '';
+  return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+async function toggleVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopVoiceRecording();
+  } else {
+    await startVoiceRecording();
+  }
+}
+
+async function startVoiceRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    appendSystem('Browser ini tidak mendukung perekaman voice message.');
+    return;
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    appendSystem('Tidak dapat merekam karena koneksi server terputus.');
+    return;
+  }
+
+  try {
+    microphoneStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    const mimeType = getSupportedVoiceMimeType();
+    mediaRecorder = mimeType
+      ? new MediaRecorder(microphoneStream, { mimeType, audioBitsPerSecond: 64000 })
+      : new MediaRecorder(microphoneStream);
+
+    voiceChunks = [];
+    mediaRecorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) voiceChunks.push(event.data);
+    };
+    mediaRecorder.onerror = () => {
+      appendSystem('Terjadi kesalahan saat merekam voice message.');
+      resetVoiceRecorder();
+    };
+    mediaRecorder.onstop = sendRecordedVoice;
+
+    mediaRecorder.start(250);
+    recordingStartedAt = Date.now();
+    setRecordingUi(true);
+    updateRecordingTimer();
+    recordingTimer = setInterval(updateRecordingTimer, 500);
+    recordingAutoStop = setTimeout(stopVoiceRecording, MAX_RECORDING_SECONDS * 1000);
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') {
+      appendSystem('Izin mikrofon ditolak. Izinkan mikrofon pada browser lalu coba lagi.');
+    } else {
+      appendSystem('Mikrofon tidak dapat digunakan: ' + (error?.message || 'unknown error'));
+    }
+    resetVoiceRecorder();
+  }
+}
+
+function stopVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+}
+
+async function sendRecordedVoice() {
+  const durationMs = Math.min(Date.now() - recordingStartedAt, MAX_RECORDING_SECONDS * 1000);
+  const mimeType = mediaRecorder?.mimeType || voiceChunks[0]?.type || 'audio/webm';
+  const blob = new Blob(voiceChunks, { type: mimeType });
+  setRecordingUi(false, 'Mengirim…');
+
+  try {
+    if (blob.size === 0) {
+      appendSystem('Rekaman kosong dan tidak dikirim.');
+      return;
+    }
+    const audio = await blobToBase64(blob);
+    const sent = sendPacket('voice_input', {
+      audio,
+      mime_type: blob.type || mimeType,
+      duration_ms: durationMs
+    });
+    if (!sent) appendSystem('Voice message gagal dikirim karena koneksi terputus.');
+  } catch (error) {
+    appendSystem('Voice message gagal diproses: ' + (error?.message || 'unknown error'));
+  } finally {
+    resetVoiceRecorder();
+  }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      resolve(result.includes(',') ? result.split(',', 2)[1] : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function setRecordingUi(recording, customText = '') {
+  const button = document.getElementById('voice-btn');
+  const status = document.getElementById('recording-status');
+  button.classList.toggle('recording', recording);
+  button.textContent = recording ? '⏹' : '🎙️';
+  button.title = recording ? 'Stop dan kirim voice message' : 'Rekam voice message';
+  status.classList.toggle('active', recording || Boolean(customText));
+  if (customText) status.textContent = customText;
+}
+
+function updateRecordingTimer() {
+  const elapsed = Math.min(Math.floor((Date.now() - recordingStartedAt) / 1000), MAX_RECORDING_SECONDS);
+  document.getElementById('recording-status').textContent = `REC ${formatDuration(elapsed)}`;
+}
+
+function formatDuration(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function resetVoiceRecorder() {
+  clearInterval(recordingTimer);
+  clearTimeout(recordingAutoStop);
+  recordingTimer = null;
+  recordingAutoStop = null;
+  if (microphoneStream) microphoneStream.getTracks().forEach(track => track.stop());
+  microphoneStream = null;
+  mediaRecorder = null;
+  voiceChunks = [];
+  setRecordingUi(false);
+  document.getElementById('recording-status').classList.remove('active');
+}
+
+// ── Lofi playlist ──────────────────────────────────────────────────────
+const lofiAudio = document.getElementById('lofi-audio');
+const musicPlayButton = document.getElementById('music-play-btn');
+const musicTrackTitle = document.getElementById('music-track-title');
+const lofiPlaylist = [
+  { title: 'tokyo-music', base: 'assets/tokyo-music' },
+  { title: 'Late-at-Night', base: 'assets/Late-at-Night' },
+  { title: 'echoes-in-blue', base: 'assets/echoes-in-blue' },
+  { title: 'Heart-Of-The-Ocean', base: 'assets/Heart-Of-The-Ocean' }
+];
+const audioExtensions = ['mp3','wav','m4a','ogg','aac','flac'];
+let currentTrackIndex = 0;
+let currentExtensionIndex = 0;
+let shouldAutoplayMusic = false;
+let failedTrackCount = 0;
+
+function currentTrackSource() {
+  return `${lofiPlaylist[currentTrackIndex].base}.${audioExtensions[currentExtensionIndex]}`;
+}
+function updateTrackTitle() { musicTrackTitle.textContent = lofiPlaylist[currentTrackIndex].title; }
+function loadCurrentTrack(autoplay = false) {
+  shouldAutoplayMusic = autoplay;
+  currentExtensionIndex = 0;
+  updateTrackTitle();
+  lofiAudio.src = currentTrackSource();
+  lofiAudio.load();
+}
+async function toggleMusic() {
+  if (lofiAudio.paused) {
+    try { await lofiAudio.play(); } catch (_) {}
+  } else lofiAudio.pause();
+}
+function stopMusic() {
+  shouldAutoplayMusic = false;
+  lofiAudio.pause();
+  try { lofiAudio.currentTime = 0; } catch (_) {}
+}
+function nextTrack(autoplay = !lofiAudio.paused) {
+  currentTrackIndex = (currentTrackIndex + 1) % lofiPlaylist.length;
+  loadCurrentTrack(autoplay);
+}
+function previousTrack(autoplay = !lofiAudio.paused) {
+  currentTrackIndex = (currentTrackIndex - 1 + lofiPlaylist.length) % lofiPlaylist.length;
+  loadCurrentTrack(autoplay);
+}
+function setMusicVolume(value) {
+  lofiAudio.volume = Math.max(0, Math.min(1, Number(value)));
+  localStorage.setItem('studibudiMusicVolume', String(lofiAudio.volume));
+}
+lofiAudio.addEventListener('play', () => { musicPlayButton.textContent = '⏸'; });
+lofiAudio.addEventListener('pause', () => { musicPlayButton.textContent = '▶'; });
+lofiAudio.addEventListener('ended', () => nextTrack(true));
+lofiAudio.addEventListener('loadedmetadata', () => {
+  failedTrackCount = 0;
+  if (shouldAutoplayMusic) lofiAudio.play().catch(() => {});
+});
+lofiAudio.addEventListener('error', () => {
+  if (currentExtensionIndex < audioExtensions.length - 1) {
+    currentExtensionIndex += 1;
+    lofiAudio.src = currentTrackSource();
+    lofiAudio.load();
+    return;
+  }
+  failedTrackCount += 1;
+  if (failedTrackCount < lofiPlaylist.length) {
+    currentTrackIndex = (currentTrackIndex + 1) % lofiPlaylist.length;
+    loadCurrentTrack(shouldAutoplayMusic);
+  }
+});
+const savedVolume = Number(localStorage.getItem('studibudiMusicVolume'));
+setMusicVolume(Number.isFinite(savedVolume) ? savedVolume : 0.25);
+document.getElementById('music-volume').value = String(lofiAudio.volume);
+loadCurrentTrack(false);
+
 // ── Keyboard shortcuts ─────────────────────────────────────────────────
-document.getElementById('msg-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+document.getElementById('msg-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMsg();
+  }
 });
 document.getElementById('msg-input').addEventListener('input', function() {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 100) + 'px';
 });
-document.getElementById('status-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendStatus();
+document.getElementById('status-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter') sendStatus();
 });
-document.getElementById('login-pass').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doLogin();
+document.getElementById('login-pass').addEventListener('keydown', event => {
+  if (event.key === 'Enter') doLogin();
 });
-document.getElementById('login-user').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('login-pass').focus();
+document.getElementById('login-user').addEventListener('keydown', event => {
+  if (event.key === 'Enter') document.getElementById('login-pass').focus();
 });
 </script>
 </body>

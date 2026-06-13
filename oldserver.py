@@ -1,6 +1,10 @@
+import base64
+import binascii
 import datetime
 import hashlib
 import json
+import os
+import uuid
 import logging
 import socket
 import sys
@@ -25,19 +29,25 @@ chat_history_handler = logging.FileHandler("chat_history.log", encoding="utf-8")
 chat_history_handler.setFormatter(logging.Formatter("%(message)s"))
 history_logger.addHandler(chat_history_handler)
 
-# Lock untuk seluruh shared state agar aman ketika banyak client aktif bersamaan.
 state_lock = threading.Lock()
 
-clients = {}  # username -> socket
-user_passwords = {}  # username -> hashed password
-user_statuses = {}  # username -> status belajar
-rooms = {"lobby": []}  # room_name -> list username
-room_messages = {"lobby": []}  # room_name -> list message entry
-private_messages = {}  # username -> pending private messages
+clients = {}
+user_passwords = {}
+user_statuses = {}
+rooms = {"lobby": []}
+room_messages = {"lobby": []}
+private_messages = {}
 room_topics = {"lobby": "hangout umum"}
 
 USER_STORE_FILE = "users.json"
 DEFAULT_STATUS = "Belum set status belajar"
+MAX_VOICE_BASE64_LENGTH = 8 * 1024 * 1024
+MAX_VOICE_DURATION_MS = 60_000
+ALLOWED_AUDIO_MIME_PREFIX = "audio/"
+MAX_FILE_BYTES = 4 * 1024 * 1024
+MAX_FILE_BASE64_LENGTH = 6 * 1024 * 1024
+ALLOWED_REACTIONS = {"👍", "❤️", "😂", "🎉", "😮", "😢"}
+MAX_ROOM_HISTORY = 20
 
 
 def log_server(message: str, *args) -> None:
@@ -74,26 +84,23 @@ def now_iso() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def format_history_entry(entry: dict) -> str:
-    return f"[{entry['timestamp']}] [{entry.get('room', '-')}] {entry['sender']}: {entry['text']}"
-
-
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
+def new_message_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def trim_room_history_locked(room_name: str) -> None:
+    room_messages[room_name] = room_messages.get(room_name, [])[-MAX_ROOM_HISTORY:]
+
+
 def encode_msg_obj(obj: dict) -> bytes:
-    """Serialisasi seluruh paket server sebagai JSON Lines."""
     return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def send_msg(
-    sock,
-    msg_type: str,
-    payload: dict | str,
-    sender: str | None = None,
-    room: str | None = None,
-) -> bool:
+def send_msg(sock, msg_type: str, payload, sender=None, room=None) -> bool:
     obj = {
         "type": msg_type,
         "sender": sender,
@@ -112,17 +119,28 @@ def send_system(sock, text: str) -> bool:
     return send_msg(sock, "system", {"text": text})
 
 
-def read_input(reader) -> str | None:
-    """Membaca satu paket input. Raw text tetap diterima untuk kompatibilitas."""
+def read_client_packet(reader):
+    """Membaca satu paket JSON Lines. Raw text tetap diterima."""
     line = reader.readline()
     if not line:
         return None
 
     try:
         packet = json.loads(line)
+        packet_type = packet.get("type")
         payload = packet.get("payload", {})
-        if packet.get("type") == "input" and isinstance(payload, dict):
+
+        if packet_type == "input" and isinstance(payload, dict):
             return str(payload.get("text", "")).strip()
+
+        if packet_type == "voice_input" and isinstance(payload, dict):
+            return {"type": "voice_input", "payload": payload}
+
+        if packet_type == "file_input" and isinstance(payload, dict):
+            return {"type": "file_input", "payload": payload}
+
+        if packet_type == "reaction_input" and isinstance(payload, dict):
+            return {"type": "reaction_input", "payload": payload}
     except (json.JSONDecodeError, TypeError, AttributeError):
         pass
 
@@ -151,7 +169,6 @@ def build_online_users_payload() -> dict:
 
 def send_online_users(target_socket=None) -> None:
     payload = build_online_users_payload()
-
     if target_socket is not None:
         send_msg(target_socket, "online_users", payload)
         return
@@ -196,61 +213,37 @@ def deliver_pending_private_messages(username: str, client_socket) -> None:
     send_system(client_socket, "End pending messages")
 
 
-def authenticate_user(client_socket, reader=None) -> str | None:
-    """Autentikasi sederhana: akun baru dibuat otomatis pada login pertama."""
+def authenticate_user(client_socket, reader=None):
     if reader is None:
         reader = client_socket.makefile("r", encoding="utf-8")
 
     send_msg(client_socket, "prompt", {"text": "Enter your username:"})
-    username = read_input(reader)
-    if not username:
-        send_msg(
-            client_socket,
-            "auth_result",
-            {"success": False, "message": "Username tidak boleh kosong."},
-        )
+    username = read_client_packet(reader)
+    if not isinstance(username, str) or not username:
+        send_msg(client_socket, "auth_result", {"success": False, "message": "Username tidak boleh kosong."})
         return None
 
     send_msg(client_socket, "prompt", {"text": "Enter your password:"})
-    password = read_input(reader)
-    if not password:
-        send_msg(
-            client_socket,
-            "auth_result",
-            {"success": False, "message": "Password tidak boleh kosong."},
-        )
+    password = read_client_packet(reader)
+    if not isinstance(password, str) or not password:
+        send_msg(client_socket, "auth_result", {"success": False, "message": "Password tidak boleh kosong."})
         return None
 
     is_new_user = False
     with state_lock:
         if username in clients:
-            send_msg(
-                client_socket,
-                "auth_result",
-                {
-                    "success": False,
-                    "message": "This user is already logged in.",
-                },
-            )
+            send_msg(client_socket, "auth_result", {"success": False, "message": "This user is already logged in."})
             return None
 
         stored_password = user_passwords.get(username)
         if stored_password is not None and stored_password != hash_password(password):
-            send_msg(
-                client_socket,
-                "auth_result",
-                {
-                    "success": False,
-                    "message": "Invalid password. Connection closing.",
-                },
-            )
+            send_msg(client_socket, "auth_result", {"success": False, "message": "Invalid password. Connection closing."})
             return None
 
         if stored_password is None:
             user_passwords[username] = hash_password(password)
             is_new_user = True
 
-        # Username langsung direservasi di dalam lock untuk mencegah login ganda.
         clients[username] = client_socket
         user_statuses.setdefault(username, DEFAULT_STATUS)
 
@@ -262,21 +255,222 @@ def authenticate_user(client_socket, reader=None) -> str | None:
         message = "Login successful."
         log_server("[SERVER] %s logged in", username)
 
-    send_msg(
-        client_socket,
-        "auth_result",
-        {"success": True, "message": message, "username": username},
-    )
+    send_msg(client_socket, "auth_result", {"success": True, "message": message, "username": username})
     return username
 
 
 user_passwords = load_user_passwords()
 
 
+def validate_voice_payload(payload: dict):
+    audio_data = payload.get("audio")
+    mime_type = str(payload.get("mime_type", "audio/webm"))
+
+    try:
+        duration_ms = int(payload.get("duration_ms", 0))
+    except (TypeError, ValueError):
+        duration_ms = 0
+
+    if not isinstance(audio_data, str) or not audio_data:
+        return None, "Data voice message kosong."
+    if len(audio_data) > MAX_VOICE_BASE64_LENGTH:
+        return None, "Voice message terlalu besar. Maksimal sekitar 60 detik."
+    if not mime_type.startswith(ALLOWED_AUDIO_MIME_PREFIX):
+        return None, "Format voice message tidak didukung."
+    if duration_ms < 0 or duration_ms > MAX_VOICE_DURATION_MS + 2_000:
+        return None, "Durasi voice message melebihi batas 60 detik."
+
+    return {
+        "audio": audio_data,
+        "mime_type": mime_type,
+        "duration_ms": duration_ms,
+    }, None
+
+
+def handle_voice_message(username: str, current_room: str, payload: dict, client_socket) -> None:
+    voice, error = validate_voice_payload(payload)
+    if error:
+        send_system(client_socket, error)
+        return
+
+    timestamp = now_iso()
+    entry = {
+        "message_id": new_message_id(),
+        "kind": "voice",
+        "room": current_room,
+        "sender": username,
+        "audio": voice["audio"],
+        "mime_type": voice["mime_type"],
+        "duration_ms": voice["duration_ms"],
+        "timestamp": timestamp,
+        "reactions": {},
+    }
+
+    with state_lock:
+        room_messages.setdefault(current_room, []).append(entry)
+        trim_room_history_locked(current_room)
+
+    broadcast_voice_to_room(current_room, entry)
+    history_logger.info(
+        "[%s] [%s] %s: [VOICE %.1f seconds]",
+        timestamp,
+        current_room,
+        username,
+        voice["duration_ms"] / 1000,
+    )
+    log_server(
+        "[%s] %s sent voice message (%.1f seconds)",
+        current_room,
+        username,
+        voice["duration_ms"] / 1000,
+    )
+
+
+def validate_file_payload(payload: dict):
+    filename = os.path.basename(str(payload.get("filename", "")).strip())[:120]
+    mime_type = str(payload.get("mime_type", "application/octet-stream")).strip()[:100]
+    file_data = payload.get("data")
+
+    try:
+        declared_size = int(payload.get("size", 0))
+    except (TypeError, ValueError):
+        declared_size = 0
+
+    if not filename:
+        return None, "Nama file tidak valid."
+    if not isinstance(file_data, str) or not file_data:
+        return None, "Data file kosong."
+    if len(file_data) > MAX_FILE_BASE64_LENGTH:
+        return None, "File terlalu besar. Maksimal 4 MB."
+
+    try:
+        raw_size = len(base64.b64decode(file_data, validate=True))
+    except (binascii.Error, ValueError):
+        return None, "Data file Base64 tidak valid."
+
+    if raw_size <= 0 or raw_size > MAX_FILE_BYTES:
+        return None, "File terlalu besar. Maksimal 4 MB."
+    if declared_size and declared_size != raw_size:
+        return None, "Ukuran file tidak sesuai."
+
+    return {
+        "filename": filename,
+        "mime_type": mime_type or "application/octet-stream",
+        "data": file_data,
+        "size": raw_size,
+    }, None
+
+
+def handle_file_message(username: str, current_room: str, payload: dict, client_socket) -> None:
+    file_info, error = validate_file_payload(payload)
+    if error:
+        send_system(client_socket, error)
+        return
+
+    timestamp = now_iso()
+    entry = {
+        "message_id": new_message_id(),
+        "kind": "file",
+        "room": current_room,
+        "sender": username,
+        "filename": file_info["filename"],
+        "mime_type": file_info["mime_type"],
+        "data": file_info["data"],
+        "size": file_info["size"],
+        "timestamp": timestamp,
+        "reactions": {},
+    }
+
+    with state_lock:
+        room_messages.setdefault(current_room, []).append(entry)
+        trim_room_history_locked(current_room)
+
+    broadcast_file_to_room(current_room, entry)
+    history_logger.info(
+        "[%s] [%s] %s: [FILE %s, %d bytes]",
+        timestamp, current_room, username, file_info["filename"], file_info["size"]
+    )
+    log_server(
+        "[%s] %s sent file %s (%d bytes)",
+        current_room, username, file_info["filename"], file_info["size"]
+    )
+
+
+def handle_reaction(username: str, current_room: str, payload: dict, client_socket) -> None:
+    message_id = str(payload.get("message_id", "")).strip()
+    emoji = str(payload.get("emoji", "")).strip()
+
+    if not message_id or emoji not in ALLOWED_REACTIONS:
+        send_system(client_socket, "Reaction tidak valid.")
+        return
+
+    updated = None
+    with state_lock:
+        for entry in room_messages.get(current_room, []):
+            if entry.get("message_id") != message_id:
+                continue
+
+            reactions = entry.setdefault("reactions", {})
+            users = reactions.setdefault(emoji, [])
+            if username in users:
+                users.remove(username)
+                if not users:
+                    reactions.pop(emoji, None)
+            else:
+                users.append(username)
+            updated = {key: list(value) for key, value in reactions.items()}
+            break
+
+    if updated is None:
+        send_system(client_socket, "Pesan untuk reaction tidak ditemukan di room aktif.")
+        return
+
+    broadcast_reaction_to_room(current_room, message_id, updated)
+
+
+def send_history_entry(client_socket, entry: dict, room_name: str) -> None:
+    common = {
+        "message_id": entry.get("message_id"),
+        "timestamp": entry.get("timestamp", ""),
+        "history": True,
+        "reactions": entry.get("reactions", {}),
+    }
+
+    if entry.get("kind") == "voice":
+        send_msg(
+            client_socket,
+            "voice",
+            {**common, "audio": entry["audio"], "mime_type": entry["mime_type"], "duration_ms": entry.get("duration_ms", 0)},
+            sender=entry["sender"],
+            room=room_name,
+        )
+    elif entry.get("kind") == "file":
+        send_msg(
+            client_socket,
+            "file",
+            {**common, "filename": entry["filename"], "mime_type": entry["mime_type"], "data": entry["data"], "size": entry.get("size", 0)},
+            sender=entry["sender"],
+            room=room_name,
+        )
+    else:
+        send_msg(
+            client_socket,
+            "history",
+            {
+                "message_id": entry.get("message_id"),
+                "sender": entry["sender"],
+                "text": entry["text"],
+                "timestamp": entry["timestamp"],
+                "reactions": entry.get("reactions", {}),
+            },
+            sender=entry["sender"],
+            room=room_name,
+        )
+
+
 def handle_client(client_socket, addr) -> None:
     username = None
     current_room = "lobby"
-    reader = None
 
     try:
         reader = client_socket.makefile("r", encoding="utf-8")
@@ -303,33 +497,48 @@ def handle_client(client_socket, addr) -> None:
         send_online_users()
 
         while True:
-            msg = read_input(reader)
-            if msg is None:
+            message = read_client_packet(reader)
+            if message is None:
                 break
-            if not msg:
+
+            if isinstance(message, dict):
+                packet_type = message.get("type")
+                payload = message.get("payload", {})
+                if packet_type == "voice_input":
+                    handle_voice_message(username, current_room, payload, client_socket)
+                elif packet_type == "file_input":
+                    handle_file_message(username, current_room, payload, client_socket)
+                elif packet_type == "reaction_input":
+                    handle_reaction(username, current_room, payload, client_socket)
                 continue
 
-            if msg.startswith("/"):
-                current_room = handle_command(
-                    username, msg, client_socket, current_room
-                )
+            if not isinstance(message, str) or not message:
+                continue
+
+            if message.startswith("/"):
+                current_room = handle_command(username, message, client_socket, current_room)
                 if current_room is None:
                     break
-            else:
-                timestamp = now_iso()
-                entry = {
-                    "room": current_room,
-                    "sender": username,
-                    "text": msg,
-                    "timestamp": timestamp,
-                }
+                continue
 
-                with state_lock:
-                    room_messages.setdefault(current_room, []).append(entry)
+            timestamp = now_iso()
+            entry = {
+                "message_id": new_message_id(),
+                "kind": "text",
+                "room": current_room,
+                "sender": username,
+                "text": message,
+                "timestamp": timestamp,
+                "reactions": {},
+            }
 
-                broadcast_to_room(current_room, entry, username)
-                history_logger.info("%s", format_history_entry(entry))
-                log_server("[%s] %s: %s", current_room, username, msg)
+            with state_lock:
+                room_messages.setdefault(current_room, []).append(entry)
+                trim_room_history_locked(current_room)
+
+            broadcast_to_room(current_room, entry, username)
+            history_logger.info("[%s] [%s] %s: %s", timestamp, current_room, username, message)
+            log_server("[%s] %s: %s", current_room, username, message)
 
     except (ConnectionResetError, BrokenPipeError):
         log_server("[SERVER] Connection lost from %s", addr)
@@ -385,10 +594,7 @@ def handle_command(username, cmd, client_socket, current_room):
                 created = False
 
         if created:
-            send_system(
-                client_socket,
-                f"Created room: {room_name} (topic: {topic})",
-            )
+            send_system(client_socket, f"Created room: {room_name} (topic: {topic})")
             log_server("[SERVER] Room created: %s (topic: %s)", room_name, topic)
         else:
             send_system(client_socket, "Room already exists!")
@@ -423,27 +629,13 @@ def handle_command(username, cmd, client_socket, current_room):
         send_msg(
             client_socket,
             "room_joined",
-            {
-                "room": room_name,
-                "topic": topic,
-                "text": f"Joined room '{room_name}'",
-            },
+            {"room": room_name, "topic": topic, "text": f"Joined room '{room_name}'"},
             room=room_name,
         )
 
         if history:
             for entry in history:
-                send_msg(
-                    client_socket,
-                    "history",
-                    {
-                        "sender": entry["sender"],
-                        "text": entry["text"],
-                        "timestamp": entry["timestamp"],
-                    },
-                    sender=entry["sender"],
-                    room=room_name,
-                )
+                send_history_entry(client_socket, entry, room_name)
         else:
             send_system(client_socket, "(no messages yet)")
         send_system(client_socket, "---")
@@ -479,68 +671,36 @@ def handle_command(username, cmd, client_socket, current_room):
         current_room = "lobby"
         broadcast_to_room(
             old_room,
-            {
-                "room": old_room,
-                "sender": "System",
-                "text": f"{username} left",
-                "timestamp": now_iso(),
-            },
+            {"room": old_room, "sender": "System", "text": f"{username} left", "timestamp": now_iso()},
             "System",
         )
         send_msg(
             client_socket,
             "room_joined",
-            {
-                "room": "lobby",
-                "topic": lobby_topic,
-                "text": f"Left '{old_room}' and joined lobby",
-            },
+            {"room": "lobby", "topic": lobby_topic, "text": f"Left '{old_room}' and joined lobby"},
             room="lobby",
         )
 
         if history:
             for entry in history:
-                send_msg(
-                    client_socket,
-                    "history",
-                    {
-                        "sender": entry["sender"],
-                        "text": entry["text"],
-                        "timestamp": entry["timestamp"],
-                    },
-                    sender=entry["sender"],
-                    room="lobby",
-                )
+                send_history_entry(client_socket, entry, "lobby")
         else:
             send_system(client_socket, "(no messages yet)")
         send_system(client_socket, "---")
 
         broadcast_to_room(
             "lobby",
-            {
-                "room": "lobby",
-                "sender": "System",
-                "text": f"{username} joined the lobby",
-                "timestamp": now_iso(),
-            },
+            {"room": "lobby", "sender": "System", "text": f"{username} joined the lobby", "timestamp": now_iso()},
             "System",
         )
         send_online_users()
-        log_server(
-            "[SERVER] %s left room %s and returned to lobby",
-            username,
-            old_room,
-        )
+        log_server("[SERVER] %s left room %s and returned to lobby", username, old_room)
         return current_room
 
     if command == "/rooms":
         with state_lock:
             rooms_list = [
-                {
-                    "name": room_name,
-                    "members": len(members),
-                    "topic": room_topics.get(room_name, ""),
-                }
+                {"name": room_name, "members": len(members), "topic": room_topics.get(room_name, "")}
                 for room_name, members in rooms.items()
             ]
         send_msg(client_socket, "rooms", {"rooms": rooms_list})
@@ -554,11 +714,7 @@ def handle_command(username, cmd, client_socket, current_room):
         recipient = parts[1].strip()
         message_text = parts[2].strip()
         timestamp = now_iso()
-        entry = {
-            "sender": username,
-            "text": message_text,
-            "timestamp": timestamp,
-        }
+        entry = {"sender": username, "text": message_text, "timestamp": timestamp}
 
         with state_lock:
             if recipient not in user_passwords:
@@ -567,7 +723,6 @@ def handle_command(username, cmd, client_socket, current_room):
             else:
                 recipient_exists = True
                 recipient_socket = clients.get(recipient)
-                # Pesan hanya disimpan sebagai pending jika penerima sedang offline.
                 if recipient_socket is None:
                     private_messages.setdefault(recipient, []).append(entry)
 
@@ -579,21 +734,14 @@ def handle_command(username, cmd, client_socket, current_room):
             send_msg(
                 recipient_socket,
                 "pm",
-                {
-                    "sender": username,
-                    "text": message_text,
-                    "timestamp": timestamp,
-                },
+                {"sender": username, "text": message_text, "timestamp": timestamp},
                 sender=username,
             )
             delivery_note = ""
         else:
             delivery_note = " (queued: user is offline)"
 
-        send_system(
-            client_socket,
-            f"[PM to {recipient}] {message_text}{delivery_note}",
-        )
+        send_system(client_socket, f"[PM to {recipient}] {message_text}{delivery_note}")
         log_server("[PM] %s -> %s: %s", username, recipient, message_text)
         return current_room
 
@@ -627,12 +775,15 @@ def handle_command(username, cmd, client_socket, current_room):
             "  /create <room> <topic>  - Create a study room\n"
             "  /join <room>            - Join a room\n"
             "  /leave                  - Leave current room and return to lobby\n"
-            "  /msg <user> <message>   - Send a private message to another user\n"
+            "  /msg <user> <message>   - Send a private message\n"
             "  /rooms                  - List all rooms\n"
             "  /users                  - List room members\n"
-            "  /online                 - List online users and their status\n"
+            "  /online                 - List online users and status\n"
             "  /status <text>          - Set learning status\n"
-            "  /help                   - Show this help"
+            "  /help                   - Show this help\n"
+            "  Voice message           - Use microphone button on web client\n"
+            "  File transfer           - Use attachment button on web client\n"
+            "  Emoji/reaction          - Use emoji and reaction buttons on web client"
         )
         send_system(client_socket, help_text)
         return current_room
@@ -649,11 +800,56 @@ def broadcast_to_room(room_name, message, sender) -> None:
     for sock in sockets:
         if sock is None:
             continue
-        if isinstance(message, dict):
-            payload = dict(message)
-        else:
-            payload = {"text": str(message)}
+        payload = dict(message) if isinstance(message, dict) else {"text": str(message)}
         send_msg(sock, "chat", payload, sender=sender, room=room_name)
+
+
+def broadcast_voice_to_room(room_name: str, entry: dict) -> None:
+    payload = {
+        "message_id": entry.get("message_id"),
+        "audio": entry["audio"],
+        "mime_type": entry["mime_type"],
+        "duration_ms": entry.get("duration_ms", 0),
+        "timestamp": entry["timestamp"],
+        "history": False,
+        "reactions": entry.get("reactions", {}),
+    }
+
+    with state_lock:
+        usernames = list(rooms.get(room_name, []))
+        sockets = [clients.get(username) for username in usernames]
+
+    for sock in sockets:
+        if sock is not None:
+            send_msg(sock, "voice", payload, sender=entry["sender"], room=room_name)
+
+
+def broadcast_file_to_room(room_name: str, entry: dict) -> None:
+    payload = {
+        "message_id": entry.get("message_id"),
+        "filename": entry["filename"],
+        "mime_type": entry["mime_type"],
+        "data": entry["data"],
+        "size": entry.get("size", 0),
+        "timestamp": entry["timestamp"],
+        "history": False,
+        "reactions": entry.get("reactions", {}),
+    }
+
+    with state_lock:
+        sockets = [clients.get(username) for username in rooms.get(room_name, [])]
+    for sock in sockets:
+        if sock is not None:
+            send_msg(sock, "file", payload, sender=entry["sender"], room=room_name)
+
+
+def broadcast_reaction_to_room(room_name: str, message_id: str, reactions: dict) -> None:
+    payload = {"message_id": message_id, "reactions": reactions}
+    with state_lock:
+        sockets = [clients.get(username) for username in rooms.get(room_name, [])]
+    for sock in sockets:
+        if sock is not None:
+            send_msg(sock, "reaction_update", payload, room=room_name)
 
 
 def main() -> None:
@@ -669,11 +865,7 @@ def main() -> None:
         while True:
             client_socket, addr = server.accept()
             log_server("[SERVER] New connection from %s", addr)
-            thread = threading.Thread(
-                target=handle_client,
-                args=(client_socket, addr),
-                daemon=True,
-            )
+            thread = threading.Thread(target=handle_client, args=(client_socket, addr), daemon=True)
             thread.start()
     except KeyboardInterrupt:
         log_server("[SERVER] Shutting down...")
