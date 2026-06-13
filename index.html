@@ -187,6 +187,14 @@
     overflow: hidden;
   }
   #app.active { display: flex; }
+  #app.room-focus .sidebar { display: none; }
+  #app.room-focus .main { flex: 1; width: 100%; }
+  #sidebar-toggle-btn {
+    display: none;
+  }
+  #app.room-focus #sidebar-toggle-btn {
+    display: inline-flex;
+  }
 
   /* ── Sidebar ── */
   .sidebar {
@@ -691,6 +699,41 @@
     border-radius: 14px 14px 4px 14px;
     background: var(--bubble-me);
   }
+  .msg-image-bubble {
+    min-width: 250px;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px 14px 14px 4px;
+    background: var(--bubble-them);
+  }
+  .msg-row.me .msg-image-bubble {
+    border-radius: 14px 14px 4px 14px;
+    background: var(--bubble-me);
+  }
+  .image-preview {
+    width: 100%;
+    max-height: 280px;
+    border-radius: 11px;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+  .image-preview img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 280px;
+    object-fit: contain;
+  }
+  .image-meta {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
   .file-icon {
     width: 38px;
     height: 38px;
@@ -1059,6 +1102,7 @@
         <div class="chat-room-topic" id="room-topic-display">Hangout umum</div>
       </div>
       <div class="header-actions">
+        <button class="header-btn" id="sidebar-toggle-btn" onclick="toggleSidebarView()">☰ Room</button>
         <div class="music-player" title="Lofi playlist">
           <span class="music-track-title" id="music-track-title">tokyo-music</span>
           <button class="music-control" onclick="previousTrack()" title="Sebelumnya">⏮</button>
@@ -1070,7 +1114,7 @@
         <button class="theme-toggle" id="app-theme-btn" onclick="toggleTheme()" title="Ganti light/dark mode">☀️ Light</button>
         <button class="header-btn" id="reconnect-btn" onclick="reconnectNow()" style="display:none" title="Sambungkan kembali ke server">🔌 Sambungkan</button>
         <button class="header-btn" onclick="sendCmd('/rooms')">🔄 Refresh</button>
-        <button class="header-btn" onclick="sendCmd('/online')">👥 Online</button>
+        <button class="header-btn" onclick="openOnlineModal()">👥 Online</button>
         <button class="header-btn" id="leave-btn" onclick="leaveRoom()" style="display:none">← Tinggalkan</button>
       </div>
     </div>
@@ -1081,7 +1125,8 @@
       <button class="voice-btn" id="voice-btn" onclick="toggleVoiceRecording()" title="Rekam voice message">🎙️</button>
       <span class="recording-status" id="recording-status">REC 00:00</span>
       <button class="composer-tool-btn" id="emoji-btn" onclick="toggleEmojiPicker(event)" title="Pilih emoji">😊</button>
-      <button class="composer-tool-btn" onclick="document.getElementById('file-input').click()" title="Kirim file maksimal 4 MB">📎</button>
+      <button class="composer-tool-btn" onclick="openFilePicker()" title="Kirim file maksimal 4 MB">📎</button>
+      <button class="composer-tool-btn" onclick="openImagePicker()" title="Kirim gambar">🖼️</button>
       <input id="file-input" type="file" hidden onchange="handleSelectedFile(event)">
       <div class="emoji-picker" id="emoji-picker"></div>
       <textarea id="msg-input" rows="1" placeholder="Ketik pesan, emoji, kirim file, atau voice message…"></textarea>
@@ -1109,6 +1154,46 @@
   </div>
 </div>
 
+<!-- Join room modal -->
+<div class="modal-overlay" id="join-modal">
+  <div class="modal">
+    <h2>📖 Gabung Ruang Belajar</h2>
+    <div id="join-room-info" style="margin-bottom:14px;color:var(--muted);line-height:1.5;font-size:13px;">
+      Pilih room untuk fokus belajar.
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeJoinModal()">Batal</button>
+      <button class="btn-primary" onclick="confirmJoinRoom()">Gabung</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leave room modal -->
+<div class="modal-overlay" id="leave-modal">
+  <div class="modal">
+    <h2>🚪 Tinggalkan Ruang?</h2>
+    <div style="margin-bottom:14px;color:var(--muted);line-height:1.5;font-size:13px;">
+      Kamu akan kembali ke lobby. Lanjutkan?
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeLeaveModal()">Batal</button>
+      <button class="btn-primary" onclick="confirmLeaveRoom()">Tinggalkan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Online users modal -->
+<div class="modal-overlay" id="online-modal">
+  <div class="modal" style="width:min(420px, calc(100vw - 32px));">
+    <h2>👥 Online Sekarang</h2>
+    <div id="online-modal-list" style="max-height:52vh;overflow:auto;padding-right:4px;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeOnlineModal()">Tutup</button>
+      <button class="btn-primary" onclick="refreshOnlineList()">Muat Ulang</button>
+    </div>
+  </div>
+</div>
+
 <audio id="lofi-audio" preload="metadata"></audio>
 
 <script>
@@ -1125,6 +1210,9 @@ let reconnectTimer = null;
 let reconnectAttempts = 0;
 let reconnectInProgress = false;
 let allowReconnect = false;
+let pendingJoinRoomName = '';
+let pendingJoinRoomTopic = '';
+let sidebarHiddenInRoom = true;
 const MAX_RECONNECT_ATTEMPTS = 8;
 const WS_HOST = location.hostname || '127.0.0.1';
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${WS_HOST}:8765`;
@@ -1568,38 +1656,79 @@ function appendFileMessage(sender, filename, mimeType, dataBase64, size, timesta
   const shell = createMessageShell(sender, isMe, messageId);
   if (isHistory) shell.group.classList.add('msg-file-history');
 
+  const isImage = mimeType.startsWith('image/');
   const bubble = document.createElement('div');
-  bubble.className = 'msg-file-bubble';
+  bubble.className = isImage ? 'msg-image-bubble' : 'msg-file-bubble';
 
-  const icon = document.createElement('div');
-  icon.className = 'file-icon';
-  icon.textContent = fileIconForMime(mimeType, filename);
+  if (isImage) {
+    const preview = document.createElement('div');
+    preview.className = 'image-preview';
+    const img = document.createElement('img');
+    img.src = `data:${mimeType};base64,${dataBase64}`;
+    img.alt = filename;
+    preview.appendChild(img);
+    bubble.appendChild(preview);
 
-  const meta = document.createElement('div');
-  meta.className = 'file-meta';
-  const name = document.createElement('div');
-  name.className = 'file-name';
-  name.textContent = filename;
-  name.title = filename;
-  const sizeElement = document.createElement('div');
-  sizeElement.className = 'file-size';
-  sizeElement.textContent = `${formatFileSize(size)}${isHistory ? ' · riwayat' : ''}`;
-  meta.appendChild(name);
-  meta.appendChild(sizeElement);
+    const meta = document.createElement('div');
+    meta.className = 'image-meta';
 
-  const download = document.createElement('a');
-  download.className = 'file-download';
-  download.href = `data:${mimeType};base64,${dataBase64}`;
-  download.download = filename;
-  download.textContent = 'Unduh';
+    const icon = document.createElement('div');
+    icon.className = 'file-icon';
+    icon.textContent = fileIconForMime(mimeType, filename);
+
+    const details = document.createElement('div');
+    details.className = 'file-meta';
+    const name = document.createElement('div');
+    name.className = 'file-name';
+    name.textContent = filename;
+    name.title = filename;
+    const sizeElement = document.createElement('div');
+    sizeElement.className = 'file-size';
+    sizeElement.textContent = `${formatFileSize(size)}${isHistory ? ' · riwayat' : ''}`;
+    details.appendChild(name);
+    details.appendChild(sizeElement);
+
+    const download = document.createElement('a');
+    download.className = 'file-download';
+    download.href = `data:${mimeType};base64,${dataBase64}`;
+    download.download = filename;
+    download.textContent = 'Unduh';
+
+    meta.appendChild(icon);
+    meta.appendChild(details);
+    meta.appendChild(download);
+    bubble.appendChild(meta);
+  } else {
+    const icon = document.createElement('div');
+    icon.className = 'file-icon';
+    icon.textContent = fileIconForMime(mimeType, filename);
+
+    const meta = document.createElement('div');
+    meta.className = 'file-meta';
+    const name = document.createElement('div');
+    name.className = 'file-name';
+    name.textContent = filename;
+    name.title = filename;
+    const sizeElement = document.createElement('div');
+    sizeElement.className = 'file-size';
+    sizeElement.textContent = `${formatFileSize(size)}${isHistory ? ' · riwayat' : ''}`;
+    meta.appendChild(name);
+    meta.appendChild(sizeElement);
+
+    const download = document.createElement('a');
+    download.className = 'file-download';
+    download.href = `data:${mimeType};base64,${dataBase64}`;
+    download.download = filename;
+    download.textContent = 'Unduh';
+
+    bubble.appendChild(icon);
+    bubble.appendChild(meta);
+    bubble.appendChild(download);
+  }
 
   const time = document.createElement('div');
   time.className = 'msg-ts';
   time.textContent = timestamp ? timestamp.slice(11, 16) : '';
-
-  bubble.appendChild(icon);
-  bubble.appendChild(meta);
-  bubble.appendChild(download);
   shell.content.appendChild(bubble);
   shell.content.appendChild(time);
   if (messageId) attachReactionControls(shell.content, messageId, reactions);
@@ -1701,15 +1830,20 @@ function renderRooms() {
     const div = document.createElement('div');
     div.className = 'room-item' + (room.name === currentRoom ? ' active' : '');
     div.innerHTML = `<div class="room-icon">#</div><div class="room-meta"><div class="room-name">${esc(room.name)}</div><div class="room-topic">${esc(room.topic || '-')}</div></div><div class="room-badge">${Number(room.members) || 0}</div>`;
-    div.onclick = () => joinRoom(room.name);
+    div.onclick = () => openJoinModal(room.name, room.topic || '');
     element.appendChild(div);
   });
 }
 
 function renderUsers() {
-  const element = document.getElementById('user-list');
-  element.innerHTML = '';
   const entries = Object.entries(onlineUsers);
+  renderUserList(document.getElementById('user-list'), entries);
+  renderUserList(document.getElementById('online-modal-list'), entries);
+}
+
+function renderUserList(element, entries) {
+  if (!element) return;
+  element.innerHTML = '';
 
   if (entries.length === 0) {
     const empty = document.createElement('div');
@@ -1757,19 +1891,80 @@ function sendStatus() {
 }
 
 function joinRoom(name) {
-  if (name !== currentRoom) sendCmd('/join ' + name);
+  if (name !== currentRoom) openJoinModal(name, rooms.find(item => item.name === name)?.topic || '');
 }
 
-function leaveRoom() { sendCmd('/leave'); }
+function leaveRoom() { openLeaveModal(); }
+
+function openJoinModal(name, topic = '') {
+  if (!name || name === currentRoom) return;
+  pendingJoinRoomName = name;
+  pendingJoinRoomTopic = topic || rooms.find(item => item.name === name)?.topic || '';
+  document.getElementById('join-room-info').innerHTML = `Kamu akan masuk ke room <strong>#${esc(name)}</strong><br/>Topik: ${esc(pendingJoinRoomTopic || '-')}`;
+  document.getElementById('join-modal').classList.add('open');
+}
+
+function closeJoinModal() {
+  document.getElementById('join-modal').classList.remove('open');
+  pendingJoinRoomName = '';
+  pendingJoinRoomTopic = '';
+}
+
+function confirmJoinRoom() {
+  if (!pendingJoinRoomName) {
+    closeJoinModal();
+    return;
+  }
+  const roomName = pendingJoinRoomName;
+  closeJoinModal();
+  sendCmd('/join ' + roomName);
+}
+
+function openLeaveModal() {
+  if (currentRoom === 'lobby') return;
+  document.getElementById('leave-modal').classList.add('open');
+}
+
+function closeLeaveModal() {
+  document.getElementById('leave-modal').classList.remove('open');
+}
+
+function confirmLeaveRoom() {
+  closeLeaveModal();
+  sendCmd('/leave');
+}
+
+function openOnlineModal() {
+  document.getElementById('online-modal').classList.add('open');
+  refreshOnlineList();
+}
+
+function closeOnlineModal() {
+  document.getElementById('online-modal').classList.remove('open');
+}
+
+function refreshOnlineList() {
+  renderUsers();
+  sendCmd('/online');
+}
 
 function setCurrentRoom(name, topic = '') {
   currentRoom = name;
   const room = rooms.find(item => item.name === name);
+  document.getElementById('app').classList.toggle('room-focus', name !== 'lobby');
+  sidebarHiddenInRoom = name !== 'lobby';
   document.getElementById('room-name-display').textContent = '#' + name;
   document.getElementById('room-topic-display').textContent = topic || room?.topic || '';
   document.getElementById('leave-btn').style.display = name === 'lobby' ? 'none' : '';
   document.getElementById('room-icon').textContent = name === 'lobby' ? '🏠' : '📖';
   renderRooms();
+}
+
+function toggleSidebarView() {
+  if (currentRoom === 'lobby') return;
+  const app = document.getElementById('app');
+  sidebarHiddenInRoom = !sidebarHiddenInRoom;
+  app.classList.toggle('room-focus', sidebarHiddenInRoom);
 }
 
 function refreshCurrentRoomHeader() {
@@ -1789,6 +1984,16 @@ function createRoom() {
   document.getElementById('new-room-topic').value = '';
   setTimeout(() => sendCmd('/rooms'), 300);
 }
+
+document.getElementById('join-modal').addEventListener('click', event => {
+  if (event.target.id === 'join-modal') closeJoinModal();
+});
+document.getElementById('leave-modal').addEventListener('click', event => {
+  if (event.target.id === 'leave-modal') closeLeaveModal();
+});
+document.getElementById('online-modal').addEventListener('click', event => {
+  if (event.target.id === 'online-modal') closeOnlineModal();
+});
 
 // ── Emoji and file transfer ────────────────────────────────────────────
 function initialiseEmojiPicker() {
@@ -1828,6 +2033,18 @@ function insertEmoji(emoji) {
   input.focus();
 }
 
+function openFilePicker() {
+  const input = document.getElementById('file-input');
+  input.accept = '*/*';
+  input.click();
+}
+
+function openImagePicker() {
+  const input = document.getElementById('file-input');
+  input.accept = 'image/*';
+  input.click();
+}
+
 async function handleSelectedFile(event) {
   const input = event.target;
   const file = input.files?.[0];
@@ -1847,11 +2064,12 @@ async function handleSelectedFile(event) {
     return;
   }
 
-  appendSystem(`Mengirim file ${file.name} (${formatFileSize(file.size)})…`);
+  const isImage = file.type.startsWith('image/');
+  appendSystem(`Mengirim ${isImage ? 'gambar' : 'file'} ${file.name} (${formatFileSize(file.size)})…`);
   try {
     const data = await blobToBase64(file);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      appendSystem('File selesai diproses, tetapi koneksi sudah terputus. Sambungkan kembali lalu kirim ulang.');
+      appendSystem(`${isImage ? 'Gambar' : 'File'} selesai diproses, tetapi koneksi sudah terputus. Sambungkan kembali lalu kirim ulang.`);
       return;
     }
     const sent = sendPacket('file_input', {
@@ -1861,12 +2079,12 @@ async function handleSelectedFile(event) {
       data
     });
     if (!sent) {
-      appendSystem('File gagal dikirim karena koneksi terputus. Sambungkan kembali lalu kirim ulang.');
+      appendSystem(`${isImage ? 'Gambar' : 'File'} gagal dikirim karena koneksi terputus. Sambungkan kembali lalu kirim ulang.`);
     } else {
-      appendSystem('File sedang diunggah ke server. Tunggu sampai bubble file muncul sebagai konfirmasi.');
+      appendSystem(`${isImage ? 'Gambar' : 'File'} sedang diunggah ke server. Tunggu sampai bubble ${isImage ? 'gambar' : 'file'} muncul sebagai konfirmasi.`);
     }
   } catch (error) {
-    appendSystem('File gagal diproses: ' + (error?.message || 'unknown error'));
+    appendSystem(`${isImage ? 'Gambar' : 'File'} gagal diproses: ` + (error?.message || 'unknown error'));
   }
 }
 
