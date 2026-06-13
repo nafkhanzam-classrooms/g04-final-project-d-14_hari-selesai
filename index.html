@@ -1127,7 +1127,7 @@ let reconnectInProgress = false;
 let allowReconnect = false;
 const MAX_RECONNECT_ATTEMPTS = 8;
 const WS_HOST = location.hostname || '127.0.0.1';
-const WS_URL = `ws://${WS_HOST}:8765`;
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${WS_HOST}:8765`;
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const MESSAGE_REACTIONS = ['👍','❤️','😂','🎉','😮','😢'];
 const COMPOSER_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😎','🤔','😭','😡','👍','👎','👏','🙌','🙏','💪','❤️','💙','🔥','✨','🎉','✅','📚'];
@@ -1282,7 +1282,6 @@ function enterApp(isReconnect = false) {
   }
 
   const roomBeforeReconnect = currentRoom;
-  if (isReconnect) setCurrentRoom('lobby');
   const refreshInitialData = () => {
     sendCmd('/rooms');
     sendCmd('/online');

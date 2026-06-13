@@ -1,9 +1,16 @@
 import json
+import os
 import socket
+import ssl
 import threading
 
+HOST = "localhost"
+PORT = 12345
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+CERT_FILE = os.path.join(PROJECT_DIR, "cert.pem")
 
-def send_input(sock: socket.socket, text: str) -> bool:
+
+def send_input(sock: ssl.SSLSocket, text: str) -> bool:
     packet = {"type": "input", "payload": {"text": text}}
     try:
         sock.sendall((json.dumps(packet, ensure_ascii=False) + "\n").encode("utf-8"))
@@ -12,7 +19,7 @@ def send_input(sock: socket.socket, text: str) -> bool:
         return False
 
 
-def read_packet(reader):
+def read_packet(reader) -> dict | None:
     line = reader.readline()
     if not line:
         return None
@@ -36,32 +43,31 @@ def print_packet(packet: dict) -> None:
         timestamp = payload.get("timestamp") or packet.get("timestamp")
         print(f"[{timestamp}] {sender}@{room}: {payload.get('text', '')}")
     elif msg_type == "history":
-        print(f"[history {payload.get('timestamp', '')}] {payload.get('sender')}: {payload.get('text', '')}")
-    elif msg_type == "voice":
-        duration = int(payload.get("duration_ms", 0)) / 1000
-        sender = packet.get("sender", "Unknown")
-        print(f"[VOICE from {sender}, {duration:.1f}s] Buka web client untuk memutar audio.")
-    elif msg_type == "file":
-        sender = packet.get("sender", "Unknown")
-        filename = payload.get("filename", "file")
-        size = int(payload.get("size", 0))
-        print(f"[FILE from {sender}] {filename} ({size} bytes). Buka web client untuk mengunduh.")
-    elif msg_type == "reaction_update":
-        reactions = payload.get("reactions", {})
-        summary = " ".join(f"{emoji} {len(users)}" for emoji, users in reactions.items())
-        print(f"[REACTION] {summary or 'reaction dihapus'}")
+        print(
+            f"[history {payload.get('timestamp')}] "
+            f"{payload.get('sender')}: {payload.get('text', '')}"
+        )
     elif msg_type == "pm":
-        print(f"[{payload.get('timestamp', '')}] [PM from {payload.get('sender')}] {payload.get('text', '')}")
+        print(
+            f"[{payload.get('timestamp', '')}] "
+            f"[PM from {payload.get('sender')}] {payload.get('text', '')}"
+        )
     elif msg_type == "rooms":
         print("Available rooms:")
         for room in payload.get("rooms", []):
-            print(f"  - {room.get('name')} ({room.get('members')} members) | {room.get('topic', '-')}")
+            print(
+                f"  - {room.get('name')} ({room.get('members')} members) "
+                f"| {room.get('topic', '-')}"
+            )
     elif msg_type == "room_joined":
         print(payload.get("text", f"Joined {payload.get('room', '')}"))
     elif msg_type == "online_users":
         print("Online users:")
         for user in payload.get("users", []):
-            print(f"  - {user.get('username')} [{user.get('room', 'lobby')}] — {user.get('status', '-')}")
+            print(
+                f"  - {user.get('username')} [{user.get('room', 'lobby')}] "
+                f"— {user.get('status', '-')}"
+            )
     elif msg_type == "status_update":
         print(f"[STATUS] {payload.get('username')}: {payload.get('status')}")
     else:
@@ -80,32 +86,51 @@ def receive_messages(reader) -> None:
             break
 
 
+def create_tls_socket() -> ssl.SSLSocket:
+    if not os.path.exists(CERT_FILE):
+        raise FileNotFoundError("cert.pem tidak ditemukan di folder project.")
+
+    # Sertifikat lokal dijadikan trust anchor agar koneksi tetap diverifikasi.
+    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=CERT_FILE)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+    raw_socket = socket.create_connection((HOST, PORT), timeout=5)
+    return context.wrap_socket(raw_socket, server_hostname=HOST)
+
+
 def main() -> None:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.connect(("127.0.0.1", 12345))
-    except OSError as exc:
-        print(f"Failed to connect: {exc}")
+        sock = create_tls_socket()
+    except (OSError, ssl.SSLError, FileNotFoundError) as exc:
+        print(f"Failed to connect securely: {exc}")
         return
 
-    print("Connected to StudiBudi Chat Server!")
+    print("Connected securely to StudiBudi TLS Chat Server!")
+    print(f"TLS version: {sock.version()}")
     reader = sock.makefile("r", encoding="utf-8")
 
     try:
         username_prompt = read_packet(reader)
         if username_prompt is None:
+            print("Server closed the connection.")
             return
         print(username_prompt.get("payload", {}).get("text", "Username:"), end=" ")
         send_input(sock, input())
 
         password_prompt = read_packet(reader)
         if password_prompt is None:
+            print("Server closed the connection.")
             return
         print(password_prompt.get("payload", {}).get("text", "Password:"), end=" ")
         send_input(sock, input())
 
         auth_packet = read_packet(reader)
-        if auth_packet is None or auth_packet.get("type") != "auth_result":
+        if auth_packet is None:
+            print("Server closed the connection during authentication.")
+            return
+
+        if auth_packet.get("type") != "auth_result":
+            print_packet(auth_packet)
             print("Authentication response is invalid.")
             return
 
@@ -118,9 +143,11 @@ def main() -> None:
         print("Type your messages or /help for commands:\n")
 
         while True:
-            message = input("> ")
-            if message and not send_input(sock, message):
+            msg = input("> ")
+            if msg and not send_input(sock, msg):
+                print("Failed to send message. Connection may be closed.")
                 break
+
     except (KeyboardInterrupt, EOFError):
         print("\nDisconnected.")
     finally:

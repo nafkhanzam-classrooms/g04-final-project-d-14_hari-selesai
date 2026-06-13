@@ -1,10 +1,14 @@
-"""WebSocket + HTTP bridge for StudiBudi.
+"""Secure WebSocket + HTTPS + TLS TCP bridge for StudiBudi.
 
 Run:
     python ws_bridge.py
 
 Open:
-    http://127.0.0.1:8000/index.html
+    https://127.0.0.1:8443/index.html
+
+Catatan:
+- cert.pem dan key.pem dipakai untuk demo lokal.
+- Browser mungkin menampilkan peringatan karena sertifikat self-signed.
 """
 
 import asyncio
@@ -13,6 +17,7 @@ import http.server
 import os
 import queue
 import socket as tcp_socket
+import ssl
 import sys
 import threading
 
@@ -33,16 +38,39 @@ except ImportError as exc:
     print(f"Gagal mengimpor oldserver.py: {exc}")
     sys.exit(1)
 
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+CERT_FILE = os.path.join(PROJECT_DIR, "cert.pem")
+KEY_FILE = os.path.join(PROJECT_DIR, "key.pem")
+
 WS_HOST = "0.0.0.0"
 WS_PORT = 8765
 TCP_HOST = "0.0.0.0"
 TCP_PORT = 12345
-HTTP_HOST = "127.0.0.1"
-HTTP_PORT = 8000
+HTTPS_HOST = "0.0.0.0"
+HTTPS_PORT = 8443
 MAX_WS_MESSAGE_SIZE = 16 * 1024 * 1024
 
 
+def require_tls_files() -> None:
+    missing = [path for path in (CERT_FILE, KEY_FILE) if not os.path.exists(path)]
+    if missing:
+        print("ERROR: File TLS tidak ditemukan:")
+        for path in missing:
+            print(f"  - {path}")
+        print("Gunakan cert.pem dan key.pem dari ZIP atau buat sertifikat baru.")
+        sys.exit(1)
+
+
+def create_server_ssl_context() -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+    return context
+
+
 class FakeSocket:
+    """Adapter agar logika socket lama dapat berjalan di atas WebSocket TLS."""
+
     def __init__(self, websocket, loop: asyncio.AbstractEventLoop):
         self._ws = websocket
         self._loop = loop
@@ -52,6 +80,7 @@ class FakeSocket:
     def sendall(self, data: bytes) -> None:
         if self._closed:
             raise OSError("WebSocket is closed")
+
         text = data.decode("utf-8")
         future = asyncio.run_coroutine_threadsafe(self._ws.send(text), self._loop)
         try:
@@ -77,7 +106,7 @@ class FakeSocket:
         return None
 
     def getpeername(self):
-        return ("ws-client", 0)
+        return ("wss-client", 0)
 
 
 class _FakeReader:
@@ -101,10 +130,14 @@ class _FakeReader:
 async def ws_handler(websocket) -> None:
     loop = asyncio.get_running_loop()
     fake_socket = FakeSocket(websocket, loop)
-    addr = getattr(websocket, "remote_address", None) or ("ws-client", 0)
-    logger.info("[WS] Koneksi baru dari %s", addr)
+    addr = getattr(websocket, "remote_address", None) or ("wss-client", 0)
+    logger.info("[WSS] Koneksi TLS baru dari %s", addr)
 
-    threading.Thread(target=handle_client, args=(fake_socket, addr), daemon=True).start()
+    threading.Thread(
+        target=handle_client,
+        args=(fake_socket, addr),
+        daemon=True,
+    ).start()
 
     try:
         async for message in websocket:
@@ -113,58 +146,75 @@ async def ws_handler(websocket) -> None:
                     message += "\n"
                 fake_socket.push_line(message)
     except Exception as exc:
-        logger.info("[WS] Koneksi %s berakhir: %s", addr, exc)
+        logger.info("[WSS] Koneksi %s berakhir: %s", addr, exc)
     finally:
         fake_socket.push_eof()
         fake_socket.close()
-        logger.info("[WS] Terputus: %s", addr)
+        logger.info("[WSS] Terputus: %s", addr)
 
 
-def start_tcp() -> None:
+def start_tls_tcp(ssl_context: ssl.SSLContext) -> None:
+    """Terminal client menggunakan TLS di port TCP 12345."""
     server = tcp_socket.socket(tcp_socket.AF_INET, tcp_socket.SOCK_STREAM)
     server.setsockopt(tcp_socket.SOL_SOCKET, tcp_socket.SO_REUSEADDR, 1)
+
     try:
         server.bind((TCP_HOST, TCP_PORT))
         server.listen(100)
-        logger.info("[TCP] Server TCP berjalan di port %d", TCP_PORT)
+        logger.info("[TLS-TCP] Server berjalan di port %d", TCP_PORT)
+
         while True:
-            client_socket, addr = server.accept()
-            threading.Thread(target=handle_client, args=(client_socket, addr), daemon=True).start()
+            raw_socket, addr = server.accept()
+            try:
+                secure_socket = ssl_context.wrap_socket(raw_socket, server_side=True)
+            except ssl.SSLError as exc:
+                logger.warning("[TLS-TCP] Handshake gagal dari %s: %s", addr, exc)
+                raw_socket.close()
+                continue
+
+            threading.Thread(
+                target=handle_client,
+                args=(secure_socket, addr),
+                daemon=True,
+            ).start()
     except OSError as exc:
-        logger.error("[TCP] Server gagal berjalan: %s", exc)
+        logger.error("[TLS-TCP] Server gagal berjalan: %s", exc)
     finally:
         server.close()
 
 
-class NoCacheHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """HTTP handler agar browser selalu mengambil index.html versi terbaru."""
+class NoCacheHTTPSRequestHandler(http.server.SimpleHTTPRequestHandler):
+    """HTTPS handler agar browser selalu mengambil index.html terbaru."""
 
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
+        self.send_header("Strict-Transport-Security", "max-age=300")
         super().end_headers()
 
 
-def start_http() -> None:
-    project_dir = os.path.dirname(os.path.abspath(__file__))
-    handler = functools.partial(NoCacheHTTPRequestHandler, directory=project_dir)
-    server = http.server.ThreadingHTTPServer((HTTP_HOST, HTTP_PORT), handler)
-    logger.info("[HTTP] Web client: http://%s:%d/index.html", HTTP_HOST, HTTP_PORT)
+def start_https(ssl_context: ssl.SSLContext) -> None:
+    handler = functools.partial(NoCacheHTTPSRequestHandler, directory=PROJECT_DIR)
+    server = http.server.ThreadingHTTPServer((HTTPS_HOST, HTTPS_PORT), handler)
+    server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
+    logger.info("[HTTPS] Web client: https://127.0.0.1:%d/index.html", HTTPS_PORT)
+
     try:
         server.serve_forever()
     except Exception as exc:
-        logger.error("[HTTP] Server gagal berjalan: %s", exc)
+        logger.error("[HTTPS] Server gagal berjalan: %s", exc)
     finally:
         server.server_close()
 
 
-async def run_ws() -> None:
-    logger.info("[WS] WebSocket server berjalan di ws://%s:%d", WS_HOST, WS_PORT)
+async def run_wss(ssl_context: ssl.SSLContext) -> None:
+    logger.info("[WSS] Secure WebSocket berjalan di wss://localhost:%d", WS_PORT)
     async with ws_serve(
         ws_handler,
         WS_HOST,
         WS_PORT,
+        ssl=ssl_context,
         max_size=MAX_WS_MESSAGE_SIZE,
         ping_interval=20,
         ping_timeout=60,
@@ -174,14 +224,19 @@ async def run_ws() -> None:
 
 
 if __name__ == "__main__":
-    logger.info("[MAIN] StudiBudi — TCP :12345 | WebSocket :8765 | HTTP :8000")
-    logger.info("[MAIN] Buka http://127.0.0.1:8000/index.html")
+    require_tls_files()
+    tls_context = create_server_ssl_context()
+
+    logger.info(
+        "[MAIN] StudiBudi TLS — TCP-TLS :12345 | WSS :8765 | HTTPS :8443"
+    )
+    logger.info("[MAIN] Buka https://127.0.0.1:8443/index.html")
     logger.info("[MAIN] Tekan Ctrl+C untuk berhenti")
 
-    threading.Thread(target=start_tcp, daemon=True).start()
-    threading.Thread(target=start_http, daemon=True).start()
+    threading.Thread(target=start_tls_tcp, args=(tls_context,), daemon=True).start()
+    threading.Thread(target=start_https, args=(tls_context,), daemon=True).start()
 
     try:
-        asyncio.run(run_ws())
+        asyncio.run(run_wss(tls_context))
     except KeyboardInterrupt:
         logger.info("[MAIN] Server dihentikan.")
