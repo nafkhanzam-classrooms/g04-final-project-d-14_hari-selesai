@@ -7,6 +7,7 @@ import os
 import uuid
 import logging
 import socket
+import sqlite3
 import sys
 import threading
 
@@ -30,8 +31,10 @@ chat_history_handler.setFormatter(logging.Formatter("%(message)s"))
 history_logger.addHandler(chat_history_handler)
 
 state_lock = threading.Lock()
+db_lock = threading.Lock()
 
 clients = {}
+authenticating_users = set()
 user_passwords = {}
 user_statuses = {}
 rooms = {"lobby": []}
@@ -48,6 +51,233 @@ MAX_FILE_BYTES = 4 * 1024 * 1024
 MAX_FILE_BASE64_LENGTH = 6 * 1024 * 1024
 ALLOWED_REACTIONS = {"👍", "❤️", "😂", "🎉", "😮", "😢"}
 MAX_ROOM_HISTORY = 20
+DATABASE_FILE = "studibudi.db"
+
+
+def get_db_connection():
+    connection = sqlite3.connect(DATABASE_FILE, timeout=30)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
+
+
+def initialize_database() -> None:
+    """Membuat database SQLite dan tabel persistence secara otomatis."""
+    with db_lock:
+        with get_db_connection() as connection:
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA synchronous = NORMAL")
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS rooms (
+                    name TEXT PRIMARY KEY,
+                    topic TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message_id TEXT NOT NULL UNIQUE,
+                    room_name TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    data_json TEXT NOT NULL,
+                    FOREIGN KEY (room_name) REFERENCES rooms(name) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_messages_room_id
+                    ON messages(room_name, id DESC);
+
+                CREATE TABLE IF NOT EXISTS pending_private_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recipient TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_pending_private_recipient
+                    ON pending_private_messages(recipient, id);
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO rooms(name, topic, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(name) DO NOTHING
+                """,
+                ("lobby", "hangout umum", now_iso()),
+            )
+
+
+def persist_room(room_name: str, topic: str) -> bool:
+    try:
+        with db_lock:
+            with get_db_connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO rooms(name, topic, created_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(name) DO UPDATE SET topic = excluded.topic
+                    """,
+                    (room_name, topic, now_iso()),
+                )
+        return True
+    except sqlite3.Error as exc:
+        log_error("[DATABASE] Failed to save room %s: %s", room_name, exc)
+        return False
+
+
+def persist_message(entry: dict) -> bool:
+    """Menyimpan atau memperbarui pesan beserta reaction-nya."""
+    try:
+        payload = json.dumps(entry, ensure_ascii=False)
+        with db_lock:
+            with get_db_connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO messages(
+                        message_id, room_name, kind, sender, timestamp, data_json
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(message_id) DO UPDATE SET
+                        room_name = excluded.room_name,
+                        kind = excluded.kind,
+                        sender = excluded.sender,
+                        timestamp = excluded.timestamp,
+                        data_json = excluded.data_json
+                    """,
+                    (
+                        entry["message_id"],
+                        entry["room"],
+                        entry.get("kind", "text"),
+                        entry["sender"],
+                        entry["timestamp"],
+                        payload,
+                    ),
+                )
+        return True
+    except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:
+        log_error("[DATABASE] Failed to save message: %s", exc)
+        return False
+
+
+def persist_pending_private_message(recipient: str, entry: dict) -> bool:
+    try:
+        with db_lock:
+            with get_db_connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO pending_private_messages(
+                        recipient, sender, text, timestamp
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (recipient, entry["sender"], entry["text"], entry["timestamp"]),
+                )
+        return True
+    except (sqlite3.Error, KeyError) as exc:
+        log_error("[DATABASE] Failed to queue private message: %s", exc)
+        return False
+
+
+def load_pending_private_messages(recipient: str) -> list[dict]:
+    try:
+        with db_lock:
+            with get_db_connection() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT id, sender, text, timestamp
+                    FROM pending_private_messages
+                    WHERE recipient = ?
+                    ORDER BY id ASC
+                    """,
+                    (recipient,),
+                ).fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.Error as exc:
+        log_error("[DATABASE] Failed to load private messages: %s", exc)
+        return []
+
+
+def delete_pending_private_messages(message_ids: list[int]) -> None:
+    if not message_ids:
+        return
+    try:
+        with db_lock:
+            with get_db_connection() as connection:
+                connection.executemany(
+                    "DELETE FROM pending_private_messages WHERE id = ?",
+                    [(message_id,) for message_id in message_ids],
+                )
+    except sqlite3.Error as exc:
+        log_error("[DATABASE] Failed to delete delivered private messages: %s", exc)
+
+
+def load_persistent_state() -> None:
+    """Memuat room dan maksimal 20 history terakhir tiap room saat startup."""
+    try:
+        with db_lock:
+            with get_db_connection() as connection:
+                room_rows = connection.execute(
+                    "SELECT name, topic FROM rooms ORDER BY created_at ASC, name ASC"
+                ).fetchall()
+
+                loaded_rooms = {}
+                loaded_topics = {}
+                loaded_messages = {}
+
+                for row in room_rows:
+                    room_name = row["name"]
+                    loaded_rooms[room_name] = []
+                    loaded_topics[room_name] = row["topic"]
+
+                    message_rows = connection.execute(
+                        """
+                        SELECT data_json
+                        FROM messages
+                        WHERE room_name = ?
+                        ORDER BY id DESC
+                        LIMIT ?
+                        """,
+                        (room_name, MAX_ROOM_HISTORY),
+                    ).fetchall()
+
+                    history = []
+                    for message_row in reversed(message_rows):
+                        try:
+                            entry = json.loads(message_row["data_json"])
+                            if isinstance(entry, dict):
+                                entry.setdefault("reactions", {})
+                                history.append(entry)
+                        except (json.JSONDecodeError, TypeError):
+                            log_error(
+                                "[DATABASE] Skipping corrupted message in room %s",
+                                room_name,
+                            )
+                    loaded_messages[room_name] = history
+
+        if "lobby" not in loaded_rooms:
+            loaded_rooms["lobby"] = []
+            loaded_topics["lobby"] = "hangout umum"
+            loaded_messages["lobby"] = []
+
+        with state_lock:
+            rooms.clear()
+            rooms.update(loaded_rooms)
+            room_topics.clear()
+            room_topics.update(loaded_topics)
+            room_messages.clear()
+            room_messages.update(loaded_messages)
+
+        total_messages = sum(len(items) for items in loaded_messages.values())
+        log_server(
+            "[DATABASE] Loaded %d rooms and %d recent messages from %s",
+            len(loaded_rooms),
+            total_messages,
+            DATABASE_FILE,
+        )
+    except sqlite3.Error as exc:
+        log_error("[DATABASE] Failed to load persistent state: %s", exc)
 
 
 def log_server(message: str, *args) -> None:
@@ -192,15 +422,30 @@ def broadcast_status_update(username: str, status: str) -> None:
 
 
 def deliver_pending_private_messages(username: str, client_socket) -> None:
+    # Antrean lama di memori tetap dibaca agar kompatibel dengan struktur sebelumnya.
     with state_lock:
-        pending = private_messages.pop(username, [])
+        memory_pending = private_messages.pop(username, [])
+
+    database_pending = load_pending_private_messages(username)
+    pending = [
+        {**entry, "database_id": None} for entry in memory_pending
+    ] + [
+        {
+            "sender": entry["sender"],
+            "text": entry["text"],
+            "timestamp": entry["timestamp"],
+            "database_id": entry["id"],
+        }
+        for entry in database_pending
+    ]
 
     if not pending:
         return
 
     send_system(client_socket, "Pending private messages:")
+    delivered_database_ids = []
     for entry in pending:
-        send_msg(
+        delivered = send_msg(
             client_socket,
             "pm",
             {
@@ -210,6 +455,10 @@ def deliver_pending_private_messages(username: str, client_socket) -> None:
             },
             sender=entry["sender"],
         )
+        if delivered and entry.get("database_id") is not None:
+            delivered_database_ids.append(entry["database_id"])
+
+    delete_pending_private_messages(delivered_database_ids)
     send_system(client_socket, "End pending messages")
 
 
@@ -231,7 +480,7 @@ def authenticate_user(client_socket, reader=None):
 
     is_new_user = False
     with state_lock:
-        if username in clients:
+        if username in clients or username in authenticating_users:
             send_msg(client_socket, "auth_result", {"success": False, "message": "This user is already logged in."})
             return None
 
@@ -240,12 +489,10 @@ def authenticate_user(client_socket, reader=None):
             send_msg(client_socket, "auth_result", {"success": False, "message": "Invalid password. Connection closing."})
             return None
 
+        authenticating_users.add(username)
         if stored_password is None:
             user_passwords[username] = hash_password(password)
             is_new_user = True
-
-        clients[username] = client_socket
-        user_statuses.setdefault(username, DEFAULT_STATUS)
 
     if is_new_user:
         save_user_passwords()
@@ -255,11 +502,24 @@ def authenticate_user(client_socket, reader=None):
         message = "Login successful."
         log_server("[SERVER] %s logged in", username)
 
-    send_msg(client_socket, "auth_result", {"success": True, "message": message, "username": username})
-    return username
+    sent = send_msg(
+        client_socket,
+        "auth_result",
+        {"success": True, "message": message, "username": username},
+    )
+
+    with state_lock:
+        authenticating_users.discard(username)
+        if sent:
+            clients[username] = client_socket
+            user_statuses.setdefault(username, DEFAULT_STATUS)
+
+    return username if sent else None
 
 
 user_passwords = load_user_passwords()
+initialize_database()
+load_persistent_state()
 
 
 def validate_voice_payload(payload: dict):
@@ -310,6 +570,7 @@ def handle_voice_message(username: str, current_room: str, payload: dict, client
         room_messages.setdefault(current_room, []).append(entry)
         trim_room_history_locked(current_room)
 
+    persist_message(entry)
     broadcast_voice_to_room(current_room, entry)
     history_logger.info(
         "[%s] [%s] %s: [VOICE %.1f seconds]",
@@ -385,6 +646,7 @@ def handle_file_message(username: str, current_room: str, payload: dict, client_
         room_messages.setdefault(current_room, []).append(entry)
         trim_room_history_locked(current_room)
 
+    persist_message(entry)
     broadcast_file_to_room(current_room, entry)
     history_logger.info(
         "[%s] [%s] %s: [FILE %s, %d bytes]",
@@ -405,6 +667,7 @@ def handle_reaction(username: str, current_room: str, payload: dict, client_sock
         return
 
     updated = None
+    updated_entry = None
     with state_lock:
         for entry in room_messages.get(current_room, []):
             if entry.get("message_id") != message_id:
@@ -418,13 +681,17 @@ def handle_reaction(username: str, current_room: str, payload: dict, client_sock
                     reactions.pop(emoji, None)
             else:
                 users.append(username)
+
             updated = {key: list(value) for key, value in reactions.items()}
+            updated_entry = dict(entry)
+            updated_entry["reactions"] = updated
             break
 
-    if updated is None:
+    if updated is None or updated_entry is None:
         send_system(client_socket, "Pesan untuk reaction tidak ditemukan di room aktif.")
         return
 
+    persist_message(updated_entry)
     broadcast_reaction_to_room(current_room, message_id, updated)
 
 
@@ -536,6 +803,7 @@ def handle_client(client_socket, addr) -> None:
                 room_messages.setdefault(current_room, []).append(entry)
                 trim_room_history_locked(current_room)
 
+            persist_message(entry)
             broadcast_to_room(current_room, entry, username)
             history_logger.info("[%s] [%s] %s: %s", timestamp, current_room, username, message)
             log_server("[%s] %s: %s", current_room, username, message)
@@ -594,6 +862,7 @@ def handle_command(username, cmd, client_socket, current_room):
                 created = False
 
         if created:
+            persist_room(room_name, topic)
             send_system(client_socket, f"Created room: {room_name} (topic: {topic})")
             log_server("[SERVER] Room created: %s (topic: %s)", room_name, topic)
         else:
@@ -723,8 +992,9 @@ def handle_command(username, cmd, client_socket, current_room):
             else:
                 recipient_exists = True
                 recipient_socket = clients.get(recipient)
-                if recipient_socket is None:
-                    private_messages.setdefault(recipient, []).append(entry)
+
+        if recipient_exists and recipient_socket is None:
+            persist_pending_private_message(recipient, entry)
 
         if not recipient_exists:
             send_system(client_socket, "User not found.")
