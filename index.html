@@ -341,6 +341,103 @@
     font-family: var(--font-ui);
   }
   .header-btn:hover { background: var(--border); color: var(--text); }
+  .header-btn.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-color: transparent;
+    color: white;
+  }
+
+
+  /* ── Lofi playlist player ── */
+  .music-player {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 4px 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .music-track-info {
+    width: 112px;
+    min-width: 0;
+    padding: 0 4px;
+  }
+
+  .music-track-label {
+    color: var(--muted);
+    font-size: 9px;
+    line-height: 1.1;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  .music-track-title {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .music-control {
+    width: 29px;
+    height: 29px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all var(--transition);
+  }
+
+  .music-control:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .music-control.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+  }
+
+  .music-volume-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: 2px;
+  }
+
+  .music-volume-icon {
+    width: 18px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .music-volume {
+    width: 64px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+
+  @media (max-width: 1120px) {
+    .music-track-info { display: none; }
+    .music-volume { width: 45px; }
+  }
+
+  @media (max-width: 900px) {
+    .music-volume-wrap { display: none; }
+  }
 
   /* ── Messages ── */
   #messages {
@@ -614,6 +711,20 @@
         <div class="chat-room-topic" id="room-topic-display">Hangout umum</div>
       </div>
       <div class="header-actions">
+        <div class="music-player" title="Lofi playlist">
+          <div class="music-track-info">
+            <div class="music-track-label">Now playing</div>
+            <div class="music-track-title" id="music-track-title">tokyo-music</div>
+          </div>
+          <button class="music-control" onclick="previousTrack()" title="Lagu sebelumnya">⏮</button>
+          <button class="music-control primary" id="music-play-btn" onclick="toggleMusic()" title="Putar">▶</button>
+          <button class="music-control" onclick="stopMusic()" title="Stop dan kembali ke awal lagu">⏹</button>
+          <button class="music-control" onclick="nextTrack()" title="Lagu berikutnya">⏭</button>
+          <div class="music-volume-wrap">
+            <span class="music-volume-icon" id="music-volume-icon" onclick="toggleMute()" title="Mute/unmute">🔉</span>
+            <input class="music-volume" id="music-volume" type="range" min="0" max="1" step="0.05" value="0.25" oninput="setMusicVolume(this.value)" title="Volume">
+          </div>
+        </div>
         <button class="header-btn" onclick="sendCmd('/rooms')">🔄 Refresh</button>
         <button class="header-btn" onclick="sendCmd('/online')">👥 Online</button>
         <button class="header-btn" id="leave-btn" onclick="leaveRoom()" style="display:none">← Tinggalkan</button>
@@ -628,6 +739,8 @@
     </div>
   </div>
 </div>
+
+<audio id="lofi-audio" preload="metadata"></audio>
 
 <!-- Create room modal -->
 <div class="modal-overlay" id="create-modal">
@@ -948,6 +1061,181 @@ function renderUsers() {
     el.appendChild(div);
   });
 }
+
+
+// ── Lofi playlist ─────────────────────────────────────────────────────
+const lofiAudio = document.getElementById('lofi-audio');
+const musicPlayButton = document.getElementById('music-play-btn');
+const musicTrackTitle = document.getElementById('music-track-title');
+const musicVolumeSlider = document.getElementById('music-volume');
+const musicVolumeIcon = document.getElementById('music-volume-icon');
+
+// Nama dasar file mengikuti lagu yang ada di folder assets.
+// Ekstensi dicoba otomatis: mp3, wav, m4a, ogg, aac, dan flac.
+const lofiPlaylist = [
+  { title: 'tokyo-music', base: 'assets/tokyo-music' },
+  { title: 'Late-at-Night', base: 'assets/Late-at-Night' },
+  { title: 'echoes-in-blue', base: 'assets/echoes-in-blue' },
+  { title: 'Heart-Of-The-Ocean', base: 'assets/Heart-Of-The-Ocean' }
+];
+const audioExtensions = ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'];
+
+let currentTrackIndex = 0;
+let currentExtensionIndex = 0;
+let shouldAutoplayAfterLoad = false;
+let failedTrackCount = 0;
+let previousVolume = 0.25;
+let musicErrorShown = false;
+
+function normaliseTrackIndex(index) {
+  return (index + lofiPlaylist.length) % lofiPlaylist.length;
+}
+
+function updateMusicTitle() {
+  const track = lofiPlaylist[currentTrackIndex];
+  musicTrackTitle.textContent = track.title;
+  musicTrackTitle.title = track.title;
+}
+
+function currentAudioSource() {
+  const track = lofiPlaylist[currentTrackIndex];
+  const extension = audioExtensions[currentExtensionIndex];
+  return `${track.base}.${extension}`;
+}
+
+function loadCurrentTrack(autoplay = false) {
+  shouldAutoplayAfterLoad = autoplay;
+  currentExtensionIndex = 0;
+  updateMusicTitle();
+  lofiAudio.src = currentAudioSource();
+  lofiAudio.load();
+}
+
+async function playCurrentTrack() {
+  try {
+    await lofiAudio.play();
+    shouldAutoplayAfterLoad = false;
+  } catch (error) {
+    // Browser dapat menolak autoplay. Klik tombol play akan mencoba kembali.
+    if (error && error.name === 'NotAllowedError') {
+      shouldAutoplayAfterLoad = false;
+    }
+  }
+}
+
+async function toggleMusic() {
+  if (lofiAudio.paused) {
+    if (!lofiAudio.src) {
+      loadCurrentTrack(true);
+    } else {
+      await playCurrentTrack();
+    }
+  } else {
+    lofiAudio.pause();
+  }
+}
+
+function stopMusic() {
+  shouldAutoplayAfterLoad = false;
+  lofiAudio.pause();
+  try {
+    lofiAudio.currentTime = 0;
+  } catch (_) {
+    // Metadata mungkin belum selesai dimuat.
+  }
+}
+
+function nextTrack(forcePlay = !lofiAudio.paused) {
+  currentTrackIndex = normaliseTrackIndex(currentTrackIndex + 1);
+  loadCurrentTrack(forcePlay);
+}
+
+function previousTrack(forcePlay = !lofiAudio.paused) {
+  currentTrackIndex = normaliseTrackIndex(currentTrackIndex - 1);
+  loadCurrentTrack(forcePlay);
+}
+
+function setMusicVolume(value) {
+  const volume = Math.max(0, Math.min(1, Number(value)));
+  lofiAudio.volume = volume;
+  musicVolumeSlider.value = String(volume);
+  if (volume > 0) previousVolume = volume;
+  localStorage.setItem('studibudiMusicVolume', String(volume));
+  updateVolumeIcon();
+}
+
+function toggleMute() {
+  if (lofiAudio.volume > 0) {
+    previousVolume = lofiAudio.volume;
+    setMusicVolume(0);
+  } else {
+    setMusicVolume(previousVolume || 0.25);
+  }
+}
+
+function updateVolumeIcon() {
+  if (lofiAudio.volume === 0) {
+    musicVolumeIcon.textContent = '🔇';
+  } else if (lofiAudio.volume < 0.5) {
+    musicVolumeIcon.textContent = '🔉';
+  } else {
+    musicVolumeIcon.textContent = '🔊';
+  }
+}
+
+function updateMusicButton() {
+  if (lofiAudio.paused) {
+    musicPlayButton.textContent = '▶';
+    musicPlayButton.title = 'Putar';
+  } else {
+    musicPlayButton.textContent = '⏸';
+    musicPlayButton.title = 'Pause';
+  }
+}
+
+lofiAudio.addEventListener('play', updateMusicButton);
+lofiAudio.addEventListener('pause', updateMusicButton);
+
+lofiAudio.addEventListener('loadedmetadata', () => {
+  failedTrackCount = 0;
+  musicErrorShown = false;
+  if (shouldAutoplayAfterLoad) playCurrentTrack();
+});
+
+// Setelah lagu selesai, otomatis lanjut. Sesudah lagu terakhir kembali ke lagu pertama.
+lofiAudio.addEventListener('ended', () => nextTrack(true));
+
+// Jika ekstensi pertama tidak ditemukan, browser mencoba ekstensi umum lainnya.
+lofiAudio.addEventListener('error', () => {
+  if (currentExtensionIndex < audioExtensions.length - 1) {
+    currentExtensionIndex += 1;
+    lofiAudio.src = currentAudioSource();
+    lofiAudio.load();
+    return;
+  }
+
+  failedTrackCount += 1;
+  if (failedTrackCount >= lofiPlaylist.length) {
+    shouldAutoplayAfterLoad = false;
+    updateMusicButton();
+    if (!musicErrorShown) {
+      appendSystem('File musik tidak ditemukan. Pastikan 4 lagu berada di folder assets dan nama filenya sesuai.');
+      musicErrorShown = true;
+    }
+    return;
+  }
+
+  currentTrackIndex = normaliseTrackIndex(currentTrackIndex + 1);
+  currentExtensionIndex = 0;
+  updateMusicTitle();
+  lofiAudio.src = currentAudioSource();
+  lofiAudio.load();
+});
+
+const savedMusicVolume = Number(localStorage.getItem('studibudiMusicVolume'));
+setMusicVolume(Number.isFinite(savedMusicVolume) ? savedMusicVolume : 0.25);
+updateMusicTitle();
+loadCurrentTrack(false);
 
 // ── Actions ───────────────────────────────────────────────────────────
 function sendMsg() {
