@@ -2,7 +2,7 @@
 <div align="center">
   <img src="assets/studibudi-logo.png" alt="Logo StudiBudi" width="150">
 
-## **Link Youtube** : https://youtu.be/NWsvA2BoB1Y?si=bai0fWHJ31HoK0he
+
 # StudiBudi
 
 ### Topic-Based Multi-Chat Room Platform for Students
@@ -18,7 +18,7 @@ Aplikasi chat berbasis jaringan yang membantu mahasiswa menemukan teman belajar,
 </div>
 
 ---
-
+## **Link Youtube** : https://youtu.be/NWsvA2BoB1Y?si=bai0fWHJ31HoK0he   
 ## Daftar Isi
 
 1. [Informasi Kelompok](#informasi-kelompok)
