@@ -2,6 +2,7 @@
 <div align="center">
   <img src="assets/studibudi-logo.png" alt="Logo StudiBudi" width="150">
 
+## **Link Youtube** : https://youtu.be/NWsvA2BoB1Y?si=bai0fWHJ31HoK0he
 # StudiBudi
 
 ### Topic-Based Multi-Chat Room Platform for Students
@@ -44,8 +45,6 @@ Aplikasi chat berbasis jaringan yang membantu mahasiswa menemukan teman belajar,
 22. [Kendala dan Solusi](#kendala-dan-solusi)
 23. [Keterbatasan Sistem](#keterbatasan-sistem)
 24. [Kesimpulan dan Saran](#kesimpulan-dan-saran)
-25. [Panduan Demo](#panduan-demo)
-26. [Checklist Pengumpulan](#checklist-pengumpulan)
 
 ---
 
@@ -1398,121 +1397,7 @@ Pengujian menunjukkan server menerima 100 concurrent WSS clients dengan success 
 
 ---
 
-## Panduan Demo
 
-Urutan demo yang direkomendasikan:
-
-### Persiapan
-
-1. Jalankan:
-
-```bash
-python ws_bridge.py
-```
-
-2. Buka dua browser atau satu browser biasa dan satu incognito.
-3. Buka:
-
-```text
-https://127.0.0.1:8443/index.html
-```
-
-4. Login dengan dua akun berbeda.
-
-### Demo Fitur Inti
-
-1. Tunjukkan authentication.
-2. Tunjukkan online user list.
-3. Ubah status belajar.
-4. Buat room baru.
-5. Kedua akun bergabung ke room.
-6. Kirim broadcast message.
-7. Tunjukkan isolasi message dengan room lain.
-8. Kirim private message.
-9. Tunjukkan timestamp.
-10. Login akun ketiga untuk menunjukkan lima history terakhir.
-
-### Demo Bonus
-
-1. Kirim emoji.
-2. Berikan reaction.
-3. Kirim file dan download dari akun penerima.
-4. Kirim voice message.
-5. Restart server dan tunjukkan persistence.
-6. Buka `studibudi.db` melalui DB Browser.
-7. Tunjukkan alamat HTTPS dan WSS.
-8. Jalankan `python client.py` dan tunjukkan TLS version.
-
-### Demo Fitur Tambahan
-
-1. Ganti dark/light mode.
-2. Putar playlist lofi.
-3. Demonstrasikan previous, pause, stop, next, dan volume.
-4. Hentikan server untuk menunjukkan disconnect.
-5. Jalankan kembali server untuk menunjukkan reconnect.
-
-### Demo Beban
-
-Tampilkan tabel dan grafik pada bagian pengujian performa. Jelaskan bahwa:
-
-- 10–25 client memiliki latency rendah;
-- 50 client mulai menunjukkan kenaikan;
-- 100 client berhasil terhubung, tetapi fan-out latency meningkat;
-- pengujian menggunakan WSS dan TLS aktif.
-
----
-
-## Checklist Pengumpulan
-
-### GitHub Classroom
-
-- [ ] Source code terbaru
-- [ ] `README.md` lengkap
-- [ ] `requirements.txt`
-- [ ] `cert.pem` dan `key.pem` untuk demo lokal
-- [ ] Logo dan favicon
-- [ ] Snapshot pada `docs/screenshots`
-- [ ] Video demo singkat
-- [ ] Link repository GitHub Classroom
-- [ ] Pastikan tidak ada credential pribadi
-
-### myITS Classroom
-
-Laporan project perlu memuat:
-
-- [ ] Pendahuluan
-- [ ] Deskripsi dan tujuan project
-- [ ] Arsitektur sistem
-- [ ] Desain protokol aplikasi
-- [ ] Pengujian performa dan beban server
-- [ ] Hasil dan analisis
-- [ ] Kendala dan solusi
-- [ ] Kesimpulan dan saran
-
-### Sebelum Submit
-
-- [ ] Jalankan project dari fresh clone
-- [ ] Install dependency dari `requirements.txt`
-- [ ] Pastikan HTTPS, WSS, dan TLS TCP berjalan
-- [ ] Uji login dua akun
-- [ ] Uji create/join/leave room
-- [ ] Uji private message
-- [ ] Uji file dan voice
-- [ ] Uji reaction
-- [ ] Uji restart dan database persistence
-- [ ] Uji reconnect
-- [ ] Pastikan video dapat dibuka
-- [ ] Pastikan link repository benar
-
----
-
-## Informasi Pengumpulan
-
-- **Batas pengumpulan:** 14 Juni 2026 pukul 23.59.
-- Source code, video demo, README, dan link GitHub dikumpulkan melalui GitHub Classroom.
-- Laporan project dikumpulkan melalui myITS Classroom.
-
----
 
 <div align="center">
 
